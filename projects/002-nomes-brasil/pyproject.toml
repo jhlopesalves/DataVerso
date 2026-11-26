@@ -1,0 +1,35 @@
+[project]
+name = "dataverso-002-nomes-brasil"
+version = "0.1.0"
+requires-python = ">=3.14,<3.15"
+dependencies = [
+    "pandas>=3.1.1",
+    "pyarrow>=26.0.1",
+    "requests>=2.34.2",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.4.0",
+    "mypy>=2.4.1",
+    "pandas-stubs>=3.1.0.261029",
+    "pytest>=9.2.0",
+    "types-requests>=2.33.0.20261030",
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "N", "ANN"]
+
+[tool.ruff.lint.per-file-ignores]
+"*.ipynb" = ["E402", "E501", "I001", "RUF001", "ANN"]
+
+[tool.mypy]
+strict = true
+files = ["collect.py", "build.py", "tests"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
