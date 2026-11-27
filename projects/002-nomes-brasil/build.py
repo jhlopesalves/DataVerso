@@ -321,19 +321,9 @@ def raw_digest(raw_dir: Path) -> str:
 
 def sort_names(frame: pd.DataFrame) -> pd.DataFrame:
     """Sort a name table by its group column, then by count descending, then by name."""
-    if "decade" in frame:
-        return frame.sort_values(
-            ["decade", "count", "name"],
-            ascending=[True, False, True],
-            ignore_index=True,
-        )
-    if "sex" in frame:
-        return frame.sort_values(
-            ["sex", "count", "name"], ascending=[True, False, True], ignore_index=True
-        )
-    return frame.sort_values(
-        ["count", "name"], ascending=[False, True], ignore_index=True
-    )
+    keys = [col for col in ("decade", "sex", "count", "name") if col in frame]
+    ascending = [col != "count" for col in keys]
+    return frame.sort_values(keys, ascending=ascending, ignore_index=True)
 
 
 def write_table(frame: pd.DataFrame, path: Path) -> dict[str, Any]:

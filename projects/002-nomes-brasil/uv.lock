@@ -338,17 +338,17 @@ requires-dist = [
     { name = "requests", specifier = ">=2.34.2" },
     { name = "scikit-learn", specifier = ">=1.9.1" },
     { name = "scipy", specifier = ">=1.18.1" },
-    { name = "threadpoolctl" },
+    { name = "threadpoolctl", specifier = ">=3.8.0" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "ipykernel", specifier = ">=7.4.0" },
     { name = "mypy", specifier = ">=2.4.1" },
-    { name = "nbconvert" },
+    { name = "nbconvert", specifier = ">=7.17.2" },
     { name = "pandas-stubs", specifier = ">=3.1.0.261029" },
     { name = "pytest", specifier = ">=9.2.0" },
-    { name = "ruff" },
+    { name = "ruff", specifier = ">=0.17.6" },
     { name = "types-requests", specifier = ">=2.33.0.20261030" },
 ]
 

@@ -65,9 +65,6 @@ FOOTER_GAP = 18.0  # plotting area to footer rule
 FOOTER_RULE_GAP = 7.0  # footer rule to footer text
 FOOTER_BOTTOM = MARGIN - 4.0  # lower edge of the footer text, 4 pt into the margin
 RULE_WIDTH = 0.8
-GRID_WIDTH = 0.6
-SPINE_WIDTH = 0.8
-ZERO_WIDTH = 1.0  # bottom spine when the y axis starts at zero
 
 FOOTER_LABELS = {
     "pt": {"source": "Fonte", "note": "Nota"},
