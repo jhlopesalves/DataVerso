@@ -1,4 +1,4 @@
-"""Tests for the parsers and data checks in ``build.py``, run on small hand-written responses."""
+"""Test the parsers and data checks in ``build.py`` on small hand-written responses."""
 
 import json
 from pathlib import Path
@@ -42,7 +42,9 @@ def test_checks_pass_on_a_complete_query() -> None:
 def test_completeness_fails_when_rows_fall_short_of_count() -> None:
     pages = fixture_pages()
     pages[2]["items"].pop()
-    check = build.check_completeness(QUERY_ID, pages, build.parse_ranking(QUERY_ID, pages))
+    check = build.check_completeness(
+        QUERY_ID, pages, build.parse_ranking(QUERY_ID, pages)
+    )
 
     assert not check.passed
     assert "4 rows for count 5" in check.detail
@@ -51,7 +53,9 @@ def test_completeness_fails_when_rows_fall_short_of_count() -> None:
 def test_completeness_fails_on_a_duplicated_name() -> None:
     pages = fixture_pages()
     pages[2]["items"][0]["nome"] = "maria"
-    check = build.check_completeness(QUERY_ID, pages, build.parse_ranking(QUERY_ID, pages))
+    check = build.check_completeness(
+        QUERY_ID, pages, build.parse_ranking(QUERY_ID, pages)
+    )
 
     assert not check.passed
     assert "1 duplicated names" in check.detail
@@ -81,7 +85,11 @@ def test_parse_census_maps_age_labels_and_converts_values() -> None:
 def test_raw_digest_is_independent_of_listing_order(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    for relative in ("census/values.json", "ranking/total/page_0001.json", "spot_checks/enzo.json"):
+    for relative in (
+        "census/values.json",
+        "ranking/total/page_0001.json",
+        "spot_checks/enzo.json",
+    ):
         path = tmp_path / relative
         path.parent.mkdir(parents=True)
         path.write_text(json.dumps({"file": relative}))
@@ -89,7 +97,9 @@ def test_raw_digest_is_independent_of_listing_order(
 
     # Reverse whatever order the file system lists the files in.
     rglob = Path.rglob
-    monkeypatch.setattr(Path, "rglob", lambda self, pattern: reversed(list(rglob(self, pattern))))
+    monkeypatch.setattr(
+        Path, "rglob", lambda self, pattern: reversed(list(rglob(self, pattern)))
+    )
     assert build.raw_digest(tmp_path) == digest
 
     # The run times are not part of the responses, so they leave the digest unchanged.

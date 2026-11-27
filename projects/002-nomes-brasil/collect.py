@@ -1,8 +1,9 @@
-"""Download IBGE's Nomes no Brasil rankings and the Censo 2022 population by age and sex.
+"""Download IBGE's name rankings and Censo 2022 population by age and sex.
 
-Run from the project directory with ``uv run python collect.py``. Each response body is saved
-under ``data/raw/`` byte for byte as IBGE sent it, and ``build.py`` turns those files into the
-processed tables. A rerun skips every file already saved, so an interrupted download resumes.
+Run from the project directory with ``uv run python collect.py``. Each response body
+is saved under ``data/raw/`` byte for byte as IBGE sent it, and ``build.py`` turns those
+files into the processed tables. A rerun skips every file already saved, so an
+interrupted download resumes.
 """
 
 import json
@@ -28,7 +29,9 @@ NAME_URL = f"{API}/nomes/2022/nome/{{name}}"
 CENSUS_AGGREGATE = 9514
 CENSUS_VARIABLE = 93  # População residente
 CENSUS_METADATA_URL = f"{API}/agregados/{CENSUS_AGGREGATE}/metadados"
-CENSUS_VALUES_URL = f"{API}/agregados/{CENSUS_AGGREGATE}/periodos/2022/variaveis/{CENSUS_VARIABLE}"
+CENSUS_VALUES_URL = (
+    f"{API}/agregados/{CENSUS_AGGREGATE}/periodos/2022/variaveis/{CENSUS_VARIABLE}"
+)
 
 USER_AGENT = "DataVerso/002 (+https://github.com/jhlopesalves/DataVerso)"
 WORKERS = 6
@@ -36,8 +39,8 @@ TIMEOUT_SECONDS = 30
 
 DECADES = range(1930, 2030, 10)
 
-# Every ranking query, keyed by the short id that names its folder under data/raw/ranking/.
-# The API ignores ``sexo`` when ``decada`` is set, so the two filters are never combined.
+# Every ranking query, keyed by its folder name under data/raw/ranking/.
+# The API ignores ``sexo`` when ``decada`` is set, so these filters are never combined.
 RANKING_QUERIES: dict[str, dict[str, str]] = {
     "total": {},
     **{f"decade_{decade}": {"decada": str(decade)} for decade in DECADES},
@@ -66,14 +69,15 @@ def age_from_label(label: str) -> int | None:
     Returns
     -------
     int or None
-        The age in completed years, with 100 standing for 100 or more, or None for a label
-        that names months or an age group.
+        The age in completed years, with 100 standing for 100 or more, or None for a
+        label that names months or an age group.
     """
     if label == "Menos de 1 ano":
         return 0
     if label == "100 anos ou mais":
         return 100
-    # Matches "1 ano" and "2 anos" to "99 anos"; groups such as "0 a 4 anos" do not match.
+    # Matches "1 ano" and "2 anos" to "99 anos". Groups such as "0 a 4 anos" do not
+    # match.
     match = re.fullmatch(r"(\d+) anos?", label)
     return int(match.group(1)) if match else None
 
@@ -119,7 +123,7 @@ def write_atomic(path: Path, content: bytes) -> None:
 
 
 def load_saved(path: Path) -> object:
-    """Return the parsed JSON saved at ``path``, or None when the file is absent or unreadable."""
+    """Return the saved JSON, or None if the file is absent or unreadable."""
     if not path.exists():
         return None
     try:
@@ -128,8 +132,10 @@ def load_saved(path: Path) -> object:
         return None
 
 
-def save_body(session: requests.Session, url: str, params: dict[str, str], path: Path) -> bool:
-    """Download ``url`` to ``path`` unless a parseable body is saved there; report a download."""
+def save_body(
+    session: requests.Session, url: str, params: dict[str, str], path: Path
+) -> bool:
+    """Download the body unless a parseable copy exists, and report if fetched."""
     if load_saved(path) is not None:
         return False
     write_atomic(path, fetch(session, url, params))
@@ -142,7 +148,7 @@ def page_path(query_id: str, page: int) -> Path:
 
 
 def save_page(session: requests.Session, query_id: str, page: int) -> bool:
-    """Download one ranking page unless it is already saved, and report whether it was fetched."""
+    """Download a ranking page if absent, and report whether it was fetched."""
     path = page_path(query_id, page)
     saved = load_saved(path)
     if isinstance(saved, dict) and isinstance(saved.get("items"), list):
@@ -162,8 +168,8 @@ def collect_ranking(
     tuple of int
         The query's ``totalPages`` and the number of pages fetched in this run.
     """
-    # Page 1 is read from disk, fetched or not, so a resumed run takes totalPages from the
-    # same body as the first run did.
+    # Read page 1 from disk so that a resumed run takes totalPages from the same body
+    # as the first run did.
     first_fetched = save_page(session, query_id, 1)
     total_pages: int = json.loads(page_path(query_id, 1).read_bytes())["totalPages"]
     fetched = pool.map(partial(save_page, session, query_id), range(2, total_pages + 1))
@@ -173,11 +179,13 @@ def collect_ranking(
 def single_year_age_ids(metadata: dict[str, Any]) -> list[int]:
     """Select the 101 single-year ``Idade`` categories from the aggregate's metadata."""
     (ages,) = (c for c in metadata["classificacoes"] if c["id"] == AGE_CLASSIFICATION)
-    return [c["id"] for c in ages["categorias"] if age_from_label(c["nome"]) is not None]
+    return [
+        c["id"] for c in ages["categorias"] if age_from_label(c["nome"]) is not None
+    ]
 
 
 def census_classification(age_ids: str) -> str:
-    """Return the ``classificacao`` parameter: each sex, the given ages, all declaration forms."""
+    """Build ``classificacao`` for each sex, given ages and all declaration forms."""
     return (
         f"{SEX_CLASSIFICATION}[{','.join(CENSUS_SEX)}]"
         f"|{AGE_CLASSIFICATION}[{age_ids}]"
@@ -186,7 +194,7 @@ def census_classification(age_ids: str) -> str:
 
 
 def collect_census(session: requests.Session) -> int:
-    """Download the aggregate's metadata, then the population for every single year of age.
+    """Download the aggregate's metadata, then the population by single year of age.
 
     Returns
     -------
@@ -195,7 +203,9 @@ def collect_census(session: requests.Session) -> int:
     """
     metadata_path = RAW_DIR / "census" / "metadata.json"
     metadata_fetched = save_body(session, CENSUS_METADATA_URL, {}, metadata_path)
-    age_ids = ",".join(map(str, single_year_age_ids(json.loads(metadata_path.read_bytes()))))
+    age_ids = ",".join(
+        map(str, single_year_age_ids(json.loads(metadata_path.read_bytes())))
+    )
     # N1 is the national level; requests percent-encodes the brackets, commas and pipes.
     params = {"localidades": "N1[all]", "classificacao": census_classification(age_ids)}
     values_path = RAW_DIR / "census" / "values.json"
@@ -218,7 +228,7 @@ def main() -> None:
     retrieval: dict[str, str | None] = {"start": None, "end": None}
     if RETRIEVAL_PATH.exists():
         retrieval = json.loads(RETRIEVAL_PATH.read_bytes())
-    # Any earlier run, complete or interrupted, started before this one, so its start is kept.
+    # Keep the start of any earlier run, whether it completed or was interrupted.
     retrieval["start"] = retrieval["start"] or utc_now()
     write_retrieval(retrieval)
 
@@ -230,15 +240,18 @@ def main() -> None:
             total_pages, fetched = collect_ranking(session, pool, query_id)
             pages_fetched += fetched
             elapsed = time.perf_counter() - query_start
-            print(f"{query_id:<12} {total_pages:>5} pages {fetched:>5} fetched {elapsed:>7.1f} s")
+            print(
+                f"{query_id:<12} {total_pages:>5} pages {fetched:>5} fetched "
+                f"{elapsed:>7.1f} s"
+            )
 
     files_fetched = pages_fetched + collect_census(session)
     for name in SPOT_CHECK_NAMES:
         path = RAW_DIR / "spot_checks" / f"{name}.json"
         files_fetched += save_body(session, NAME_URL.format(name=name), {}, path)
 
-    # The end marks the last download, so a run that only finds every file saved keeps the
-    # end of the run that completed them. A run that downloads ends after every earlier one.
+    # The end marks the last download. If all files are already saved, keep the
+    # earlier end time. If this run downloads any files, its end supersedes that time.
     if files_fetched:
         retrieval["end"] = utc_now()
         write_retrieval(retrieval)
