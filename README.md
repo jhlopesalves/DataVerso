@@ -15,18 +15,7 @@ The subjects vary, from language and the humanities to urban and social data. Ea
 
 ## Exploring the work
 
-Each project lives in a numbered directory under [`projects/`](projects/). Start with its README for the research question, data provenance, setup instructions and methodological limitations, then open the notebook to follow the analysis and its figures. Some projects require separately obtained data or map resources.
-
-## Running a project
-
-Each project has its own environment, managed with [uv](https://docs.astral.sh/uv/):
-
-```bash
-cd projects/<project>
-uv sync
-```
-
-Then select the project's `.venv` as the notebook kernel.
+Each project lives in a numbered directory under [`projects/`](projects/). Start with its README for the research question, data provenance, setup in its own uv environment and methodological limitations, then open the notebook to follow the analysis and its figures. Some projects require separately obtained data or map resources.
 
 ## Licence
 

@@ -70,6 +70,8 @@ about 12 minutes; an interrupted `collect.py` resumes where it stopped. `build.p
 the tables from the downloaded responses, checks them and exits with an error when a check
 fails.
 
+To run the analysis, select `.venv/bin/python` in this directory as the notebook kernel and run `dataverso_002.ipynb` from here.
+
 ## Data and provenance
 
 Both sources come from IBGE's public data API and cover Brazil as a whole.
