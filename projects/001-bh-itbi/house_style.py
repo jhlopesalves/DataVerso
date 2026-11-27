@@ -1,8 +1,8 @@
 """House style for the figures of DataVerso exploration 001.
 
-The module holds the colours, canvas sizes and Matplotlib defaults of the figures, the header
-and footer drawn around each of them, the axes styling and the number formatting of the tick
-labels. Later projects copy it and extend it when they repeat something new.
+The module holds the colours, canvas sizes and Matplotlib defaults of the figures, the
+header and footer drawn around each of them, the axes styling and the number formatting
+of the tick labels. Later projects copy it and extend it when they repeat something new.
 """
 
 from pathlib import Path
@@ -18,7 +18,7 @@ from matplotlib.ticker import FuncFormatter
 FONT_DIR = Path(__file__).resolve().parents[2] / "fonts"
 SIGNATURE = "github.com/jhlopesalves/DataVerso"  # bottom right of every figure
 
-# --- Colours -------------------------------------------------------------------------------
+# --- Colours --------------------------------------------------------------------------
 PAPER = "#fbfaf7"  # background
 INK = "#1f1f1f"  # title, labels on the data and the zero baseline
 SUBTLE = "#4a4a48"  # subtitle
@@ -28,13 +28,13 @@ RULE = "#dcd8cf"  # gridlines and footer rule
 CONTEXT = "#b4b0a8"  # de-emphasised marks
 ACCENT = "#0f766e"  # header bar and the series that carries the argument
 
-# --- Canvases: (width, height) in inches, and dots per inch ------------------------------
+# --- Canvases: (width, height) in inches, and dots per inch ---------------------------
 SOCIAL_SIZE = (7.2, 9.0)
 SOCIAL_DPI = 150
 LANDSCAPE_SIZE = (9.0, 6.0)
 LANDSCAPE_DPI = 200
 
-# --- Type: sizes in points, line spacing as a multiple of the font size --------------------
+# --- Type: sizes in points, line spacing as a multiple of the font size ---------------
 TITLE_FONT = "IBM Plex Serif"
 TEXT_FONT = "IBM Plex Sans"
 TITLE_SIZE, TITLE_SPACING = 20.0, 1.15
@@ -44,7 +44,7 @@ UNIT_SIZE = 9.0
 TICK_SIZE = 9.0
 LABEL_SIZE = 9.5
 
-# --- Lengths in points (1/72 inch) ---------------------------------------------------------
+# --- Lengths in points (1/72 inch) ----------------------------------------------------
 MARGIN = 26.0  # outer page margin
 ACCENT_BAR_WIDTH, ACCENT_BAR_HEIGHT = 34.0, 3.0
 ACCENT_BAR_GAP = 12.0  # accent bar to title
@@ -91,12 +91,14 @@ RC_PARAMS: dict[str, object] = {
 
 
 def register_fonts() -> None:
-    """Register the IBM Plex fonts in the repository's ``fonts/`` directory with Matplotlib."""
+    """Register the IBM Plex fonts from the repository's ``fonts/`` directory."""
     for path in sorted(FONT_DIR.glob("*.ttf")):
         font_manager.fontManager.addfont(path)
 
 
-def frame(fig: Figure, *, title: str, subtitle: str, source: str, note: str, lang: str) -> None:
+def frame(
+    fig: Figure, *, title: str, subtitle: str, source: str, note: str, lang: str
+) -> None:
     """Draw the header and footer of ``fig`` and fit the plotting area between them.
 
     The texts carry explicit line breaks, from which their heights are computed.
@@ -115,13 +117,18 @@ def frame(fig: Figure, *, title: str, subtitle: str, source: str, note: str, lan
     width, height = fig.get_size_inches() * 72  # canvas in points
     top = _add_header(fig, title, subtitle, width, height) - HEADER_GAP
     bottom = _add_footer(fig, source, note, lang, width, height) + FOOTER_GAP
-    # Constrained layout measures each axes' margins from where the axes stand. Starting the
-    # grid at the canvas edge lets the y tick labels, rather than the unit label fixed at the
-    # page margin, decide where the axes settle.
+    # Constrained layout measures each axes' margins from where the axes stand.
+    # Starting the grid at the canvas edge lets the y tick labels, rather than the unit
+    # label fixed at the page margin, decide where the axes settle.
     fig.subplots_adjust(left=0)
     fig.set_layout_engine(
         "constrained",
-        rect=(MARGIN / width, bottom / height, 1 - 2 * MARGIN / width, (top - bottom) / height),
+        rect=(
+            MARGIN / width,
+            bottom / height,
+            1 - 2 * MARGIN / width,
+            (top - bottom) / height,
+        ),
         w_pad=0,
         h_pad=0,
         hspace=0.05,
@@ -130,13 +137,18 @@ def frame(fig: Figure, *, title: str, subtitle: str, source: str, note: str, lan
 
 def _text_height(text: str, size: float, spacing: float) -> float:
     """Return the height in points of a text drawn with a numeric line spacing."""
-    # Matplotlib gives each line spacing * (ascent + descent) of the font, which is one em
-    # for IBM Plex, so the height follows from the number of lines.
+    # Matplotlib gives each line spacing * (ascent + descent) of the font, which is
+    # one em for IBM Plex, so the height follows from the number of lines.
     return (text.count("\n") + 1) * spacing * size
 
 
-def _add_header(fig: Figure, title: str, subtitle: str, width: float, height: float) -> float:
-    """Draw the accent bar, title and subtitle; return the header's lower edge in points."""
+def _add_header(
+    fig: Figure, title: str, subtitle: str, width: float, height: float
+) -> float:
+    """Draw the accent bar, title and subtitle.
+
+    Return the header's lower edge in points.
+    """
     left = MARGIN / width
     y = height - MARGIN  # running position, in points above the bottom edge
     bar = Rectangle(
@@ -184,11 +196,21 @@ def _add_footer(
     text = f"{labels['source']}: {source}\n{labels['note']}: {note}"
     left = MARGIN / width
     top = FOOTER_BOTTOM + _text_height(text, NOTE_SIZE, NOTE_SPACING)
-    style = dict(fontsize=NOTE_SIZE, color=MUTED, linespacing=NOTE_SPACING, parse_math=False)
+    style = dict(
+        fontsize=NOTE_SIZE, color=MUTED, linespacing=NOTE_SPACING, parse_math=False
+    )
     fig.text(left, FOOTER_BOTTOM / height, text, va="bottom", **style)
     # The signature sits at the right margin, level with the first footer line.
     right = 1 - left
-    fig.text(right, top / height, SIGNATURE, ha="right", va="top", fontweight="semibold", **style)
+    fig.text(
+        right,
+        top / height,
+        SIGNATURE,
+        ha="right",
+        va="top",
+        fontweight="semibold",
+        **style,
+    )
     rule = top + FOOTER_RULE_GAP
     line = Line2D(
         [left, right],
@@ -217,17 +239,18 @@ def style_axes(
     xlabel : str, optional
         Label of the x axis.
     zero_baseline : bool, default False
-        Start the y axis at zero unless an observation lies below it, and draw the bottom
-        spine dark whenever the axis starts at zero.
+        Start the y axis at zero unless an observation lies below it, and draw the
+        bottom spine dark whenever the axis starts at zero.
     """
     for side in ("top", "right", "left"):
         ax.spines[side].set_visible(False)
     ax.grid(True, axis="y", color=RULE, linewidth=GRID_WIDTH)
-    # Tick sizes, pads and label colours come from RC_PARAMS; the marks take the axis colour.
+    # Tick sizes, pads and label colours come from RC_PARAMS. The marks take the axis
+    # colour.
     ax.tick_params(axis="x", color=AXIS)
 
-    # x as a fraction of the figure puts the unit at the page margin, in line with the header
-    # and footer; y as a fraction of the axes keeps it just above them.
+    # The figure fraction puts the unit at the page margin, in line with the header
+    # and footer. The axes fraction keeps the unit just above the axes.
     page_width = ax.get_figure(root=True).get_figwidth() * 72
     ax.annotate(
         unit,
@@ -251,7 +274,7 @@ def style_axes(
 
 def _format_number(value: float, lang: str, decimals: int) -> str:
     """Write ``value`` with the thousands and decimal separators of ``lang``."""
-    # round() takes halves to the even neighbour; a zero result is reset to 0.0 so that a
+    # round() takes halves to the even neighbour. Reset a zero result to 0.0 so that a
     # small negative value does not print as "-0".
     rounded = round(float(value), decimals)
     if rounded == 0:
@@ -264,8 +287,8 @@ def _format_number(value: float, lang: str, decimals: int) -> str:
 def format_brl(value: float, lang: str, decimals: int = 0) -> str:
     """Write an amount in Brazilian reais.
 
-    The minus sign precedes ``R$``, Portuguese puts a space after it, and halves round to the
-    even neighbour.
+    The minus sign precedes ``R$``, Portuguese puts a space after it, and halves round
+    to the even neighbour.
 
     Examples
     --------

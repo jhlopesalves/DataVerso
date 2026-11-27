@@ -1,0 +1,276 @@
+{
+  "checks": [
+    {
+      "detail": "4,282 pages, 128,458 rows, names unique",
+      "name": "completeness total",
+      "result": "pass"
+    },
+    {
+      "detail": "199 pages, 5,965 rows, names unique",
+      "name": "completeness decade_1930",
+      "result": "pass"
+    },
+    {
+      "detail": "399 pages, 11,959 rows, names unique",
+      "name": "completeness decade_1940",
+      "result": "pass"
+    },
+    {
+      "detail": "619 pages, 18,557 rows, names unique",
+      "name": "completeness decade_1950",
+      "result": "pass"
+    },
+    {
+      "detail": "863 pages, 25,887 rows, names unique",
+      "name": "completeness decade_1960",
+      "result": "pass"
+    },
+    {
+      "detail": "1,070 pages, 32,071 rows, names unique",
+      "name": "completeness decade_1970",
+      "result": "pass"
+    },
+    {
+      "detail": "1,247 pages, 37,381 rows, names unique",
+      "name": "completeness decade_1980",
+      "result": "pass"
+    },
+    {
+      "detail": "1,153 pages, 34,571 rows, names unique",
+      "name": "completeness decade_1990",
+      "result": "pass"
+    },
+    {
+      "detail": "913 pages, 27,374 rows, names unique",
+      "name": "completeness decade_2000",
+      "result": "pass"
+    },
+    {
+      "detail": "626 pages, 18,774 rows, names unique",
+      "name": "completeness decade_2010",
+      "result": "pass"
+    },
+    {
+      "detail": "300 pages, 8,985 rows, names unique",
+      "name": "completeness decade_2020",
+      "result": "pass"
+    },
+    {
+      "detail": "2,446 pages, 73,361 rows, names unique",
+      "name": "completeness sex_f",
+      "result": "pass"
+    },
+    {
+      "detail": "2,032 pages, 60,954 rows, names unique",
+      "name": "completeness sex_m",
+      "result": "pass"
+    },
+    {
+      "detail": "ordered, minimum count 20",
+      "name": "order total",
+      "result": "pass"
+    },
+    {
+      "detail": "ordered, minimum count 20",
+      "name": "order decade_1930",
+      "result": "pass"
+    },
+    {
+      "detail": "ordered, minimum count 20",
+      "name": "order decade_1940",
+      "result": "pass"
+    },
+    {
+      "detail": "ordered, minimum count 20",
+      "name": "order decade_1950",
+      "result": "pass"
+    },
+    {
+      "detail": "ordered, minimum count 20",
+      "name": "order decade_1960",
+      "result": "pass"
+    },
+    {
+      "detail": "ordered, minimum count 20",
+      "name": "order decade_1970",
+      "result": "pass"
+    },
+    {
+      "detail": "ordered, minimum count 20",
+      "name": "order decade_1980",
+      "result": "pass"
+    },
+    {
+      "detail": "ordered, minimum count 20",
+      "name": "order decade_1990",
+      "result": "pass"
+    },
+    {
+      "detail": "ordered, minimum count 20",
+      "name": "order decade_2000",
+      "result": "pass"
+    },
+    {
+      "detail": "ordered, minimum count 20",
+      "name": "order decade_2010",
+      "result": "pass"
+    },
+    {
+      "detail": "ordered, minimum count 20",
+      "name": "order decade_2020",
+      "result": "pass"
+    },
+    {
+      "detail": "ordered, minimum count 20",
+      "name": "order sex_f",
+      "result": "pass"
+    },
+    {
+      "detail": "ordered, minimum count 20",
+      "name": "order sex_m",
+      "result": "pass"
+    },
+    {
+      "detail": "61,469 names with decade rows, 0 above their total; decade counts sum to 186,340,745 (91.8% of 203,080,756)",
+      "name": "decades within totals",
+      "result": "pass"
+    },
+    {
+      "detail": "0 names above their total; 10,582 names in both sex tables, 10,582 of them with f + m == total",
+      "name": "sexes within totals",
+      "result": "pass"
+    },
+    {
+      "detail": "101 ages for each of total, m, f; total population 203,080,756; 0 ages with m + f != total",
+      "name": "census",
+      "result": "pass"
+    },
+    {
+      "detail": "total, 10 decades and 2 sexes match; decade sum 12,284,474 of 12,284,478",
+      "name": "spot check maria",
+      "result": "pass"
+    },
+    {
+      "detail": "total, 10 decades and 2 sexes match; decade sum 5,164,750 of 5,164,752",
+      "name": "spot check jose",
+      "result": "pass"
+    },
+    {
+      "detail": "total, 10 decades and 2 sexes match; decade sum 95,699 of 95,702",
+      "name": "spot check wellington",
+      "result": "pass"
+    },
+    {
+      "detail": "total, 9 decades and 2 sexes match; decade sum 450,154 of 450,167",
+      "name": "spot check jessica",
+      "result": "pass"
+    },
+    {
+      "detail": "total, 9 decades and 2 sexes match; decade sum 404,068 of 404,088",
+      "name": "spot check enzo",
+      "result": "pass"
+    }
+  ],
+  "outputs": {
+    "census_age_sex.parquet": {
+      "rows": 303,
+      "sha256": "1787f17cdc687135bd622737f1a7e991cbe540a8e8ed7b5aa109a21a616c69eb"
+    },
+    "names_decade.parquet": {
+      "rows": 221524,
+      "sha256": "6b22b690e2b2b5a50ed6060be392a16f7e178126f8b03e2602defca83b424f68"
+    },
+    "names_sex.parquet": {
+      "rows": 134315,
+      "sha256": "df3f8cb6fb21409fce2113cfb549b32c9021ae97a2c6fca7e3712b617451420a"
+    },
+    "names_total.parquet": {
+      "rows": 128458,
+      "sha256": "532ecabb6f98e483a7d560a48b47b3ecc213a6e54df470343f1cbc7a20a3e8ec"
+    }
+  },
+  "queries": {
+    "decade_1930": {
+      "count": 5965,
+      "rows": 5965,
+      "totalPages": 199
+    },
+    "decade_1940": {
+      "count": 11959,
+      "rows": 11959,
+      "totalPages": 399
+    },
+    "decade_1950": {
+      "count": 18557,
+      "rows": 18557,
+      "totalPages": 619
+    },
+    "decade_1960": {
+      "count": 25887,
+      "rows": 25887,
+      "totalPages": 863
+    },
+    "decade_1970": {
+      "count": 32071,
+      "rows": 32071,
+      "totalPages": 1070
+    },
+    "decade_1980": {
+      "count": 37381,
+      "rows": 37381,
+      "totalPages": 1247
+    },
+    "decade_1990": {
+      "count": 34571,
+      "rows": 34571,
+      "totalPages": 1153
+    },
+    "decade_2000": {
+      "count": 27374,
+      "rows": 27374,
+      "totalPages": 913
+    },
+    "decade_2010": {
+      "count": 18774,
+      "rows": 18774,
+      "totalPages": 626
+    },
+    "decade_2020": {
+      "count": 8985,
+      "rows": 8985,
+      "totalPages": 300
+    },
+    "sex_f": {
+      "count": 73361,
+      "rows": 73361,
+      "totalPages": 2446
+    },
+    "sex_m": {
+      "count": 60954,
+      "rows": 60954,
+      "totalPages": 2032
+    },
+    "total": {
+      "count": 128458,
+      "rows": 128458,
+      "totalPages": 4282
+    }
+  },
+  "raw_digest": "9f19195e69c4b6a5789df4c9fdb9b8f6d05b6d4b8489e40c96cba5060dd1ef1c",
+  "retrieved": {
+    "end": "2026-11-26T13:49:11+00:00",
+    "start": "2026-11-26T13:37:43+00:00"
+  },
+  "source": {
+    "census_aggregate": 9514,
+    "census_metadata_url": "https://servicodados.ibge.gov.br/api/v3/agregados/9514/metadados",
+    "census_values_url": "https://servicodados.ibge.gov.br/api/v3/agregados/9514/periodos/2022/variaveis/93?localidades=N1[all]&classificacao=2[6794,4,5]|287[{single-year age ids}]|286[113635]",
+    "census_variable": 93,
+    "citation": [
+      "IBGE, Censo Demográfico 2022, Nomes no Brasil",
+      "IBGE, Censo Demográfico 2022, tabela 9514 (SIDRA)"
+    ],
+    "name_url": "https://servicodados.ibge.gov.br/api/v3/nomes/2022/nome/{name}",
+    "ranking_url": "https://servicodados.ibge.gov.br/api/v3/nomes/2022/localidade/0/ranking/nome?page={page}[&decada={decade}|&sexo={sex}]"
+  }
+}

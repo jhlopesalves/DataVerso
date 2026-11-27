@@ -11,21 +11,11 @@ The subjects vary, from language and the humanities to urban and social data. Ea
 | Project | What it explores | Materials |
 | --- | --- | --- |
 | **001 · Belo Horizonte property transactions** | Declared property values, spatial variation, quality-adjusted trends and clustering around round numbers in municipal ITBI records. | [Project notes](projects/001-bh-itbi/README.md) · [Notebook](projects/001-bh-itbi/dataverso_001.ipynb) |
+| **002 · Brazilian first names across generations** | Concentration, generational names, life cycles and spelling fashions in first names by birth decade, from Censo 2022 data collected through IBGE's API. | [Project notes](projects/002-nomes-brasil/README.md) · [Notebook](projects/002-nomes-brasil/dataverso_002.ipynb) |
 
 ## Exploring the work
 
-Each project lives in a numbered directory under [`projects/`](projects/). Start with its README for the research question, data provenance, setup instructions and methodological limitations, then open the notebook to follow the analysis and its figures. Some projects require separately obtained data or map resources.
-
-## Running a project
-
-Each project has its own environment, managed with [uv](https://docs.astral.sh/uv/):
-
-```bash
-cd projects/<project>
-uv sync
-```
-
-Then select the project's `.venv` as the notebook kernel.
+Each project lives in a numbered directory under [`projects/`](projects/). Start with its README for the research question, data provenance, setup in its own uv environment and methodological limitations, then open the notebook to follow the analysis and its figures. Some projects require separately obtained data or map resources.
 
 ## Licence
 
