@@ -32,7 +32,7 @@ line-length = 88
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "N", "ANN"]
 
 [tool.ruff.lint.per-file-ignores]
-"*.ipynb" = ["E402", "E501", "I001", "RUF001", "ANN"]
+"*.ipynb" = ["E501", "RUF001"]
 
 [tool.mypy]
 strict = true
