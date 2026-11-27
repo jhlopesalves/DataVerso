@@ -131,12 +131,77 @@
       "result": "pass"
     },
     {
+      "detail": "within 5e-05 pp (max 5.00e-05 pp)",
+      "name": "percent total",
+      "result": "pass"
+    },
+    {
+      "detail": "within 5e-05 pp (max 5.00e-06 pp)",
+      "name": "percent decade_1930",
+      "result": "pass"
+    },
+    {
+      "detail": "within 5e-05 pp (max 5.00e-05 pp)",
+      "name": "percent decade_1940",
+      "result": "pass"
+    },
+    {
+      "detail": "within 5e-05 pp (max 5.00e-05 pp)",
+      "name": "percent decade_1950",
+      "result": "pass"
+    },
+    {
+      "detail": "within 5e-05 pp (max 5.00e-05 pp)",
+      "name": "percent decade_1960",
+      "result": "pass"
+    },
+    {
+      "detail": "within 5e-05 pp (max 5.00e-05 pp)",
+      "name": "percent decade_1970",
+      "result": "pass"
+    },
+    {
+      "detail": "within 5e-05 pp (max 5.00e-05 pp)",
+      "name": "percent decade_1980",
+      "result": "pass"
+    },
+    {
+      "detail": "within 5e-05 pp (max 5.00e-05 pp)",
+      "name": "percent decade_1990",
+      "result": "pass"
+    },
+    {
+      "detail": "within 5e-05 pp (max 5.00e-05 pp)",
+      "name": "percent decade_2000",
+      "result": "pass"
+    },
+    {
+      "detail": "within 5e-05 pp (max 5.00e-05 pp)",
+      "name": "percent decade_2010",
+      "result": "pass"
+    },
+    {
+      "detail": "within 5e-05 pp (max 4.99e-05 pp)",
+      "name": "percent decade_2020",
+      "result": "pass"
+    },
+    {
+      "detail": "within 5e-05 pp (max 5.00e-05 pp)",
+      "name": "percent sex_f",
+      "result": "pass"
+    },
+    {
+      "detail": "within 5e-05 pp (max 5.00e-05 pp)",
+      "name": "percent sex_m",
+      "result": "pass"
+    },
+    {
       "detail": "61,469 names with decade rows, 0 above their total; decade counts sum to 186,340,745 (91.8% of 203,080,756)",
       "name": "decades within totals",
       "result": "pass"
     },
     {
-      "detail": "0 names above their total; 10,582 names in both sex tables, 10,582 of them with f + m == total",
+      "detail": "10,582 in both (0 with f + m != total), 113,151 in one (0 outside 0..19), 4,725 in neither (0 above 38)",
       "name": "sexes within totals",
       "result": "pass"
     },

@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 import pytest
 
 import build
@@ -37,6 +38,7 @@ def test_checks_pass_on_a_complete_query() -> None:
 
     assert build.check_completeness(QUERY_ID, pages, frame).passed
     assert build.check_order(QUERY_ID, frame).passed
+    assert build.check_percent(QUERY_ID, pages).passed
 
 
 def test_completeness_fails_when_rows_fall_short_of_count() -> None:
@@ -68,6 +70,37 @@ def test_order_fails_when_frequencia_increases() -> None:
 
     assert not check.passed
     assert "count increases" in check.detail
+
+
+def test_sexes_fails_when_single_sex_gap_reaches_disclosure_threshold() -> None:
+    names_total = pd.DataFrame([{"name": "maria", "count": 100, "rank": 1}])
+    names_sex = pd.DataFrame([{"sex": "f", "name": "maria", "count": 80, "rank": 1}])
+    check = build.check_sexes(names_total, names_sex)
+
+    assert not check.passed
+    assert "1 outside 0..19" in check.detail
+
+
+def test_spot_name_reports_built_decade_missing_from_endpoint() -> None:
+    response = {
+        "nome": "enzo",
+        "frequencia": 65,
+        "homens": 65,
+        "mulheres": None,
+        "decadas": [{"2010": 45}],
+    }
+    names_total = pd.DataFrame([{"name": "enzo", "count": 65, "rank": 1}])
+    names_decade = pd.DataFrame(
+        [
+            {"decade": 2010, "name": "enzo", "count": 45, "rank": 1},
+            {"decade": 2020, "name": "enzo", "count": 20, "rank": 2},
+        ]
+    )
+    names_sex = pd.DataFrame([{"sex": "m", "name": "enzo", "count": 65, "rank": 1}])
+    check = build.check_spot_name(response, names_total, names_decade, names_sex)
+
+    assert not check.passed
+    assert "2020 endpoint None against built 20" in check.detail
 
 
 def test_parse_census_maps_age_labels_and_converts_values() -> None:

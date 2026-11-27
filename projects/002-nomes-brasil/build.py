@@ -1,9 +1,23 @@
 """Build the processed name and census tables from IBGE's raw responses.
 
 Run from the project directory with ``uv run python build.py`` after ``collect.py``.
-The script reads ``data/raw/``, checks the data against the contract below, and writes
-four Parquet tables and ``manifest.json`` to ``data/processed/``. It exits with status 1
-when any check fails.
+The script reads ``data/raw/`` and checks that:
+
+- every ranking query has all its pages and rows, unique names, non-increasing counts
+  of at least 20, non-decreasing ranks, and ``percent`` values matching
+  ``100 * frequencia / EXPECTED_POPULATION`` to four decimal places;
+- no name's decade counts sum to more than its national total;
+- a name's female and male counts sum to its national total when both are published,
+  fall short by at most 19 when one sex is suppressed, and leave a total of at most 38
+  when neither sex is published;
+- SIDRA table 9514 has all 101 single-year ages for total, male and female, sums to
+  ``EXPECTED_POPULATION``, and satisfies ``m + f == total`` at every age;
+- the five spot-checked name responses match the built total, decade and sex rows in
+  both directions.
+
+If any check fails, the script prints the outcomes and exits with status 1 without
+writing anything. Otherwise it writes four Parquet tables and ``manifest.json`` to
+``data/processed/``.
 """
 
 import hashlib
@@ -36,11 +50,14 @@ from collect import (
 
 PROCESSED_DIR = PROJECT_DIR / "data" / "processed"
 
-# Resident population of Brazil on 1 August 2022. IBGE's ``percent`` field divides by
-# this figure in every ranking query, which is why the processed tables drop it.
-POPULATION = 203_080_756
-# The national name tables omit names given to fewer than 20 people.
-MINIMUM_COUNT = 20
+# Censo 2022 resident population on 1 August 2022, from SIDRA table 9514. IBGE's
+# ``percent`` field rounds ``100 * frequencia / EXPECTED_POPULATION`` to four decimal
+# places, so the processed tables drop it after checking that agreement within half a
+# unit in the fourth decimal place.
+EXPECTED_POPULATION: int = 203_080_756
+PERCENT_TOLERANCE = 5e-5
+# The ranking tables omit names given to fewer than 20 people.
+DISCLOSURE_THRESHOLD = 20
 
 NAME_COLUMNS = {"name": "string", "count": "int64", "rank": "int32"}
 CENSUS_CELLS = {(age, sex) for age in range(101) for sex in CENSUS_SEX.values()}
@@ -65,27 +82,13 @@ def load_pages(query_dir: Path) -> dict[int, dict[str, Any]]:
 
 
 def parse_ranking(query_id: str, pages: dict[int, dict[str, Any]]) -> pd.DataFrame:
-    """Turn the pages of one ranking query into one row per name, in page order.
-
-    Parameters
-    ----------
-    query_id
-        A key of ``RANKING_QUERIES``. The query's own parameters give the ``decade`` or
-        ``sex`` column, because the pages carry only the ranked items.
-    pages
-        The query's pages as returned by ``load_pages``.
-
-    Returns
-    -------
-    pandas.DataFrame
-        Columns ``name``, ``count`` and ``rank``. For filtered queries, ``decade`` or
-        ``sex`` comes first.
-    """
+    """Turn one ranking query's pages into one typed row per name, in page order."""
     items = [item for page in pages.values() for item in page["items"]]
     frame = pd.DataFrame(items, columns=["nome", "frequencia", "rank"]).rename(
         columns={"nome": "name", "frequencia": "count"}
     )
     columns = NAME_COLUMNS
+    # Pages carry only the ranked items; any filter column comes from the query itself.
     params = RANKING_QUERIES[query_id]
     if "decada" in params:
         frame.insert(0, "decade", int(params["decada"]))
@@ -97,15 +100,11 @@ def parse_ranking(query_id: str, pages: dict[int, dict[str, Any]]) -> pd.DataFra
 
 
 def parse_census(values: list[dict[str, Any]]) -> pd.DataFrame:
-    """Turn the census values response into one row per age and sex.
-
-    SIDRA sends each value as a string and labels each cell with its categories, so
-    the age comes from the ``Idade`` label and the sex from the ``Sexo`` category id.
-    """
+    """Turn the SIDRA census values response into one typed row per age and sex."""
     (variable,) = values
     rows = []
     for result in variable["resultados"]:
-        # Each ``categoria`` holds a single {id: label} pair.
+        # SIDRA sends values as strings and each ``categoria`` as one {id: label} pair.
         categories = {int(c["id"]): c["categoria"] for c in result["classificacoes"]}
         (sex_id,) = categories[SEX_CLASSIFICATION]
         (age_label,) = categories[AGE_CLASSIFICATION].values()
@@ -147,20 +146,34 @@ def check_completeness(
 
 
 def check_order(query_id: str, frame: pd.DataFrame) -> Check:
-    """Check that counts never rise and ranks never fall in page order.
-
-    Counts must be at least 20.
-    """
+    """Check that counts never rise, stay at least 20, and ranks never fall."""
     problems = []
     if not frame["count"].is_monotonic_decreasing:
         problems.append("count increases")
     if not frame["rank"].is_monotonic_increasing:
         problems.append("rank decreases")
     minimum = int(frame["count"].min())
-    if minimum < MINIMUM_COUNT:
+    if minimum < DISCLOSURE_THRESHOLD:
         problems.append(f"minimum count {minimum}")
     detail = "; ".join(problems) or f"ordered, minimum count {minimum}"
     return Check(f"order {query_id}", not problems, detail)
+
+
+def check_percent(query_id: str, pages: dict[int, dict[str, Any]]) -> Check:
+    """Check that ``percent`` agrees with ``100 * frequencia / EXPECTED_POPULATION``."""
+    diffs = [
+        abs(item["percent"] - 100 * item["frequencia"] / EXPECTED_POPULATION)
+        for page in pages.values()
+        for item in page["items"]
+    ]
+    worst = max(diffs, default=0.0)
+    mismatched = sum(diff > PERCENT_TOLERANCE for diff in diffs)
+    detail = (
+        f"{mismatched} rows beyond {PERCENT_TOLERANCE:g} pp (max {worst:.2e} pp)"
+        if mismatched
+        else f"within {PERCENT_TOLERANCE:g} pp (max {worst:.2e} pp)"
+    )
+    return Check(f"percent {query_id}", mismatched == 0, detail)
 
 
 def check_decades(names_total: pd.DataFrame, names_decade: pd.DataFrame) -> Check:
@@ -173,29 +186,45 @@ def check_decades(names_total: pd.DataFrame, names_decade: pd.DataFrame) -> Chec
     people = int(decade_sums.sum())
     detail = (
         f"{len(decade_sums):,} names with decade rows, {over} above their total; "
-        f"decade counts sum to {people:,} ({people / POPULATION:.1%} of {POPULATION:,})"
+        f"decade counts sum to {people:,} "
+        f"({people / EXPECTED_POPULATION:.1%} of {EXPECTED_POPULATION:,})"
     )
     return Check("decades within totals", over == 0, detail)
 
 
 def check_sexes(names_total: pd.DataFrame, names_sex: pd.DataFrame) -> Check:
-    """Check that the sum of a name's female and male counts is at most its total."""
+    """Check that sex counts match national totals up to the disclosure threshold."""
     # Summing in the pivot keeps a duplicated row from stopping the build here; the
     # completeness check reports duplicates.
-    by_sex = names_sex.pivot_table(
+    raw_by_sex = names_sex.pivot_table(
         index="name", columns="sex", values="count", aggfunc="sum"
     )
-    sex_sums = by_sex.sum(axis=1)
-    totals = names_total.set_index("name")["count"].reindex(by_sex.index)
-    over = int((~sex_sums.le(totals)).sum())
-    in_both = by_sex.notna().all(axis=1)
-    exact = int((sex_sums[in_both] == totals[in_both]).sum())
-    detail = (
-        f"{over} names above their total; "
-        f"{int(in_both.sum()):,} names in both sex tables, "
-        f"{exact:,} of them with f + m == total"
+    totals = names_total.set_index("name")["count"]
+    unlisted = len(raw_by_sex.index.difference(totals.index))
+    by_sex = raw_by_sex.reindex(index=totals.index, columns=["f", "m"])
+    max_suppressed = DISCLOSURE_THRESHOLD - 1
+
+    present = by_sex.notna().sum(axis=1)
+    both = present == 2
+    one = present == 1
+    neither = present == 0
+
+    both_bad = int(
+        (by_sex.loc[both, "f"] + by_sex.loc[both, "m"] != totals[both]).sum()
     )
-    return Check("sexes within totals", over == 0, detail)
+    one_gap = totals[one] - by_sex.loc[one].sum(axis=1)
+    one_bad = int((~one_gap.between(0, max_suppressed)).sum())
+    neither_bad = int((~totals[neither].between(0, 2 * max_suppressed)).sum())
+
+    failures = unlisted + both_bad + one_bad + neither_bad
+    detail = (
+        f"{int(both.sum()):,} in both ({both_bad} with f + m != total), "
+        f"{int(one.sum()):,} in one ({one_bad} outside 0..{max_suppressed}), "
+        f"{int(neither.sum()):,} in neither ({neither_bad} above {2 * max_suppressed})"
+    )
+    if unlisted:
+        detail = f"{unlisted} sex rows missing from total; {detail}"
+    return Check("sexes within totals", failures == 0, detail)
 
 
 def check_census(census: pd.DataFrame) -> Check:
@@ -214,7 +243,7 @@ def check_census(census: pd.DataFrame) -> Check:
         f"101 ages for each of total, m, f; total population {total:,}; "
         f"{mismatched} ages with m + f != total"
     )
-    return Check("census", total == POPULATION and mismatched == 0, detail)
+    return Check("census", total == EXPECTED_POPULATION and mismatched == 0, detail)
 
 
 def check_spot_name(
@@ -239,20 +268,31 @@ def check_spot_name(
     built_sexes = dict(
         zip(sex_rows["sex"].tolist(), sex_rows["count"].tolist(), strict=True)
     )
-    endpoint_sexes = {"m": response["homens"], "f": response["mulheres"]}
+    endpoint_sexes = {
+        sex: count
+        for sex, count in (("f", response["mulheres"]), ("m", response["homens"]))
+        if count is not None and count >= DISCLOSURE_THRESHOLD
+    }
 
     problems = []
     if total != [response["frequencia"]]:
         problems.append(f"total {response['frequencia']:,} against rows {total}")
-    for decade, count in endpoint_decades.items():
-        if built_decades.get(decade) != count:
-            problems.append(f"{decade} {count:,} against {built_decades.get(decade)}")
-    for sex, count in built_sexes.items():
-        if endpoint_sexes[sex] != count:
-            problems.append(f"{sex} {endpoint_sexes[sex]:,} against {count:,}")
+    for decade in sorted(endpoint_decades.keys() | built_decades.keys()):
+        if built_decades.get(decade) != endpoint_decades.get(decade):
+            problems.append(
+                f"{decade} endpoint {endpoint_decades.get(decade)} "
+                f"against built {built_decades.get(decade)}"
+            )
+    for sex in sorted(endpoint_sexes.keys() | built_sexes.keys()):
+        if built_sexes.get(sex) != endpoint_sexes.get(sex):
+            problems.append(
+                f"{sex} endpoint {endpoint_sexes.get(sex)} "
+                f"against built {built_sexes.get(sex)}"
+            )
     decade_sum = sum(endpoint_decades.values())
     detail = "; ".join(problems) or (
-        f"total, {len(endpoint_decades)} decades and {len(built_sexes)} sexes match; "
+        f"total, {len(endpoint_decades)} decades and "
+        f"{len(endpoint_sexes)} sexes match; "
         f"decade sum {decade_sum:,} of {response['frequencia']:,}"
     )
     return Check(f"spot check {name}", not problems, detail)
@@ -281,12 +321,19 @@ def raw_digest(raw_dir: Path) -> str:
 
 def sort_names(frame: pd.DataFrame) -> pd.DataFrame:
     """Sort a name table by its group column, then by count descending, then by name."""
-    keys = [column for column in ("decade", "sex") if column in frame] + [
-        "count",
-        "name",
-    ]
-    ascending = [column != "count" for column in keys]
-    return frame.sort_values(keys, ascending=ascending, ignore_index=True)
+    if "decade" in frame:
+        return frame.sort_values(
+            ["decade", "count", "name"],
+            ascending=[True, False, True],
+            ignore_index=True,
+        )
+    if "sex" in frame:
+        return frame.sort_values(
+            ["sex", "count", "name"], ascending=[True, False, True], ignore_index=True
+        )
+    return frame.sort_values(
+        ["count", "name"], ascending=[False, True], ignore_index=True
+    )
 
 
 def write_table(frame: pd.DataFrame, path: Path) -> dict[str, Any]:
@@ -319,6 +366,7 @@ def main() -> None:
     # The order checks read the frames in page order, so they run before any sorting.
     checks = [check_completeness(q, pages[q], frames[q]) for q in RANKING_QUERIES]
     checks += [check_order(q, frames[q]) for q in RANKING_QUERIES]
+    checks += [check_percent(q, pages[q]) for q in RANKING_QUERIES]
     checks += [
         check_decades(names_total, names_decade),
         check_sexes(names_total, names_sex),
@@ -336,6 +384,8 @@ def main() -> None:
         )
     passed = sum(check.passed for check in checks)
     print(f"{passed} of {len(checks)} checks passed")
+    if passed < len(checks):
+        sys.exit(1)
 
     tables = {
         "names_total.parquet": sort_names(names_total),
@@ -388,9 +438,6 @@ def main() -> None:
     }
     text = json.dumps(manifest, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
     (PROCESSED_DIR / "manifest.json").write_text(text, encoding="utf-8")
-
-    if passed < len(checks):
-        sys.exit(1)
 
 
 if __name__ == "__main__":
