@@ -8,7 +8,9 @@ interrupted download resumes.
 
 import json
 import re
+import threading
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from functools import partial
@@ -48,6 +50,7 @@ RANKING_QUERIES: dict[str, dict[str, str]] = {
     "sex_m": {"sexo": "m"},
 }
 
+# Two very common old names, a -ton name, a 1990s name and a recent name.
 SPOT_CHECK_NAMES = ("maria", "jose", "wellington", "jessica", "enzo")
 
 # SIDRA classification ids in aggregate 9514, and the categories requested from each.
@@ -57,21 +60,11 @@ DECLARATION_CLASSIFICATION = 286  # Forma de declaração da idade
 DECLARATION_TOTAL = 113635
 CENSUS_SEX = {"6794": "total", "4": "m", "5": "f"}
 
+_thread_local = threading.local()
+
 
 def age_from_label(label: str) -> int | None:
-    """Return the single year of age a SIDRA ``Idade`` label denotes.
-
-    Parameters
-    ----------
-    label
-        A category label such as ``Menos de 1 ano``, ``7 anos`` or ``100 anos ou mais``.
-
-    Returns
-    -------
-    int or None
-        The age in completed years, with 100 standing for 100 or more, or None for a
-        label that names months or an age group.
-    """
+    """Return the completed age (100 for 100+) of a SIDRA ``Idade`` label, or None."""
     if label == "Menos de 1 ano":
         return 0
     if label == "100 anos ou mais":
@@ -82,28 +75,28 @@ def age_from_label(label: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
-def make_session() -> requests.Session:
-    """Create the shared HTTP session with the project's user agent and retry policy."""
-    retry = Retry(
-        total=5,
-        backoff_factor=1,
-        status_forcelist=(429, 500, 502, 503, 504),
-        respect_retry_after_header=True,
-    )
-    session = requests.Session()
-    session.headers["User-Agent"] = USER_AGENT
-    session.mount("https://", HTTPAdapter(max_retries=retry))
+def get_session() -> requests.Session:
+    """Return this thread's HTTP session, creating it with retries on first use."""
+    session: requests.Session | None = getattr(_thread_local, "session", None)
+    if session is None:
+        retry = Retry(
+            total=5,
+            backoff_factor=1,
+            status_forcelist=(429, 500, 502, 503, 504),
+            respect_retry_after_header=True,
+        )
+        session = requests.Session()
+        session.headers["User-Agent"] = USER_AGENT
+        session.mount("https://", HTTPAdapter(max_retries=retry))
+        _thread_local.session = session
     return session
 
 
-def fetch(session: requests.Session, url: str, params: dict[str, str]) -> bytes:
-    """Send one GET request and return the response body as received.
-
-    Retries happen inside urllib3; their record travels with the final response, so each
-    one is printed here.
-    """
-    response = session.get(url, params=params, timeout=TIMEOUT_SECONDS)
+def fetch(url: str, params: dict[str, str]) -> bytes:
+    """Send one GET request on this thread's session and return the response bytes."""
+    response = get_session().get(url, params=params, timeout=TIMEOUT_SECONDS)
     response.raise_for_status()
+    # Retries happen inside urllib3; their record travels with the final response.
     retries = response.raw.retries
     for attempt in retries.history if retries else ():
         print(f"  retried {response.url}: {attempt.status or attempt.error}")
@@ -111,11 +104,9 @@ def fetch(session: requests.Session, url: str, params: dict[str, str]) -> bytes:
 
 
 def write_atomic(path: Path, content: bytes) -> None:
-    """Write ``content`` to ``path`` through a temporary file in the same directory.
-
-    The rename replaces the target in one step, so an interrupted run leaves either the
-    complete file or no file at all.
-    """
+    """Write ``content`` to ``path`` atomically via a sibling temporary file."""
+    # Renaming replaces the target in one step, so an interrupted run never leaves a
+    # partial file.
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f"{path.name}.tmp")
     temporary.write_bytes(content)
@@ -132,13 +123,16 @@ def load_saved(path: Path) -> object:
         return None
 
 
-def save_body(
-    session: requests.Session, url: str, params: dict[str, str], path: Path
+def save_response(
+    url: str,
+    params: dict[str, str],
+    path: Path,
+    is_valid: Callable[[object], bool] = lambda saved: saved is not None,
 ) -> bool:
-    """Download the body unless a parseable copy exists, and report if fetched."""
-    if load_saved(path) is not None:
+    """Download ``url`` to ``path`` unless ``load_saved(path)`` passes ``is_valid``."""
+    if is_valid(load_saved(path)):
         return False
-    write_atomic(path, fetch(session, url, params))
+    write_atomic(path, fetch(url, params))
     return True
 
 
@@ -147,32 +141,24 @@ def page_path(query_id: str, page: int) -> Path:
     return RAW_DIR / "ranking" / query_id / f"page_{page:04d}.json"
 
 
-def save_page(session: requests.Session, query_id: str, page: int) -> bool:
+def save_page(query_id: str, page: int) -> bool:
     """Download a ranking page if absent, and report whether it was fetched."""
-    path = page_path(query_id, page)
-    saved = load_saved(path)
-    if isinstance(saved, dict) and isinstance(saved.get("items"), list):
-        return False
     params = {**RANKING_QUERIES[query_id], "page": str(page)}
-    write_atomic(path, fetch(session, RANKING_URL, params))
-    return True
+    return save_response(
+        RANKING_URL,
+        params,
+        page_path(query_id, page),
+        lambda saved: isinstance(saved, dict) and isinstance(saved.get("items"), list),
+    )
 
 
-def collect_ranking(
-    session: requests.Session, pool: ThreadPoolExecutor, query_id: str
-) -> tuple[int, int]:
-    """Download every page of one ranking query.
-
-    Returns
-    -------
-    tuple of int
-        The query's ``totalPages`` and the number of pages fetched in this run.
-    """
+def collect_ranking(pool: ThreadPoolExecutor, query_id: str) -> tuple[int, int]:
+    """Download every page of one ranking query and return ``(totalPages, fetched)``."""
     # Read page 1 from disk so that a resumed run takes totalPages from the same body
     # as the first run did.
-    first_fetched = save_page(session, query_id, 1)
+    first_fetched = save_page(query_id, 1)
     total_pages: int = json.loads(page_path(query_id, 1).read_bytes())["totalPages"]
-    fetched = pool.map(partial(save_page, session, query_id), range(2, total_pages + 1))
+    fetched = pool.map(partial(save_page, query_id), range(2, total_pages + 1))
     return total_pages, first_fetched + sum(fetched)
 
 
@@ -193,23 +179,17 @@ def census_classification(age_ids: str) -> str:
     )
 
 
-def collect_census(session: requests.Session) -> int:
-    """Download the aggregate's metadata, then the population by single year of age.
-
-    Returns
-    -------
-    int
-        The number of files downloaded in this run.
-    """
+def collect_census() -> int:
+    """Download the census metadata and single-year population; return files fetched."""
     metadata_path = RAW_DIR / "census" / "metadata.json"
-    metadata_fetched = save_body(session, CENSUS_METADATA_URL, {}, metadata_path)
+    metadata_fetched = save_response(CENSUS_METADATA_URL, {}, metadata_path)
     age_ids = ",".join(
         map(str, single_year_age_ids(json.loads(metadata_path.read_bytes())))
     )
     # N1 is the national level; requests percent-encodes the brackets, commas and pipes.
     params = {"localidades": "N1[all]", "classificacao": census_classification(age_ids)}
     values_path = RAW_DIR / "census" / "values.json"
-    return metadata_fetched + save_body(session, CENSUS_VALUES_URL, params, values_path)
+    return metadata_fetched + save_response(CENSUS_VALUES_URL, params, values_path)
 
 
 def utc_now() -> str:
@@ -229,15 +209,15 @@ def main() -> None:
     if RETRIEVAL_PATH.exists():
         retrieval = json.loads(RETRIEVAL_PATH.read_bytes())
     # Keep the start of any earlier run, whether it completed or was interrupted.
-    retrieval["start"] = retrieval["start"] or utc_now()
-    write_retrieval(retrieval)
+    if retrieval["start"] is None:
+        retrieval["start"] = utc_now()
+        write_retrieval(retrieval)
 
-    session = make_session()
     pages_fetched = 0
     with ThreadPoolExecutor(max_workers=WORKERS) as pool:
         for query_id in RANKING_QUERIES:
             query_start = time.perf_counter()
-            total_pages, fetched = collect_ranking(session, pool, query_id)
+            total_pages, fetched = collect_ranking(pool, query_id)
             pages_fetched += fetched
             elapsed = time.perf_counter() - query_start
             print(
@@ -245,10 +225,10 @@ def main() -> None:
                 f"{elapsed:>7.1f} s"
             )
 
-    files_fetched = pages_fetched + collect_census(session)
+    files_fetched = pages_fetched + collect_census()
     for name in SPOT_CHECK_NAMES:
         path = RAW_DIR / "spot_checks" / f"{name}.json"
-        files_fetched += save_body(session, NAME_URL.format(name=name), {}, path)
+        files_fetched += save_response(NAME_URL.format(name=name), {}, path)
 
     # The end marks the last download. If all files are already saved, keep the
     # earlier end time. If this run downloads any files, its end supersedes that time.
@@ -256,8 +236,10 @@ def main() -> None:
         retrieval["end"] = utc_now()
         write_retrieval(retrieval)
     elapsed = time.perf_counter() - run_start
-    print(f"{pages_fetched} ranking pages fetched in {elapsed:.1f} s", end="")
-    print(f" ({pages_fetched / elapsed:.1f} pages per second)")
+    print(
+        f"{pages_fetched} ranking pages fetched in {elapsed:.1f} s "
+        f"({pages_fetched / elapsed:.1f} pages per second)"
+    )
 
 
 if __name__ == "__main__":
