@@ -7,6 +7,7 @@ from pathlib import Path
 
 AUDIT_DIR = Path(__file__).resolve().parent
 RESULTS_DIR = AUDIT_DIR.parent / "results"
+RENAMES_PATH = AUDIT_DIR.parent / "results_renames.json"
 KEYS = {
     "diversity_by_sex.csv": ("decade", "sex_class"),
     "heads_by_sex.csv": ("decade", "name"),
@@ -24,6 +25,8 @@ INTS = {
     "rank",
     "peak_decade",
     "bearers",
+    "bearers_in_decade",
+    "bearers_national",
     "group",
     "k",
     "seed",
@@ -32,7 +35,7 @@ INTS = {
     "overlap_count",
     "comeback_trough_decade",
 }
-STRINGS = {"name", "top1_name", "sex_class", "set", "comparison"}
+STRINGS = {"name", "top1_name", "sex_class", "set", "subset", "comparison"}
 RTOL = 1e-9
 
 
@@ -58,8 +61,20 @@ def row_index(rows: list[dict[str, str]], keys: tuple[str, ...]) -> dict:
     return index
 
 
-def compare(path: Path, reference: Path, keys: tuple[str, ...]) -> dict:
+def compare(
+    name: str, path: Path, reference: Path, keys: tuple[str, ...], renames: dict
+) -> dict:
     columns, rows = read_csv(path)
+    col_map: dict[str, str] = renames.get("columns", {}).get(name, {})
+    if col_map:
+        columns = [col_map.get(col, col) for col in columns]
+        rows = [
+            {col_map.get(col, col): val for col, val in row.items()} for row in rows
+        ]
+        keys = tuple(col_map.get(col, col) for col in keys)
+    for col, mapping in renames.get("values", {}).get(name, {}).items():
+        for row in rows:
+            row[col] = mapping.get(row[col], row[col])
     ref_columns, ref_rows = read_csv(reference)
     audit = row_index(rows, keys)
     repo = row_index(ref_rows, keys)
@@ -111,8 +126,20 @@ def main() -> None:
         default=AUDIT_DIR / "output" / "part5" / "reconciled",
     )
     args = parser.parse_args()
+    renames = (
+        json.loads(RENAMES_PATH.read_text(encoding="utf-8"))
+        if RENAMES_PATH.exists()
+        else {}
+    )
+    file_renames = renames.get("files", {})
     summaries = {
-        name: compare(args.audit_tables / name, RESULTS_DIR / name, keys)
+        file_renames.get(name, name): compare(
+            name,
+            args.audit_tables / name,
+            RESULTS_DIR / file_renames.get(name, name),
+            keys,
+            renames,
+        )
         for name, keys in KEYS.items()
     }
     print(json.dumps(summaries, indent=2))

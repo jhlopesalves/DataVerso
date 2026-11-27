@@ -7,8 +7,10 @@ any disagreement.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -16,6 +18,7 @@ import pandas as pd
 AUDIT_DIR = Path(__file__).resolve().parent
 PART1_DIR = AUDIT_DIR / "output" / "part1"
 REPO_RESULTS_DIR = AUDIT_DIR.parent / "results"
+RENAMES_PATH = AUDIT_DIR.parent / "results_renames.json"
 
 TABLE_SPECS: dict[str, dict[str, list[str]]] = {
     "diversity_by_decade.csv": {
@@ -64,11 +67,18 @@ TABLE_SPECS: dict[str, dict[str, list[str]]] = {
 
 
 def compare_table(
-    filename: str, spec: dict[str, list[str]]
+    filename: str, spec: dict[str, list[str]], renames: dict[str, Any]
 ) -> tuple[list[dict[str, object]], bool]:
     """Compare one CSV table by key and report whether raw row order matches."""
-    df_audit = pd.read_csv(PART1_DIR / filename)
-    df_repo = pd.read_csv(REPO_RESULTS_DIR / filename)
+    repo_name = renames.get("files", {}).get(filename, filename)
+    col_map: dict[str, str] = renames.get("columns", {}).get(filename, {})
+    df_audit = pd.read_csv(PART1_DIR / filename).rename(columns=col_map)
+    for column, mapping in renames.get("values", {}).get(filename, {}).items():
+        df_audit[column] = df_audit[column].replace(mapping)
+    df_repo = pd.read_csv(REPO_RESULTS_DIR / repo_name)
+    spec = {
+        group: [col_map.get(col, col) for col in cols] for group, cols in spec.items()
+    }
 
     disagreements: list[dict[str, object]] = []
 
@@ -173,11 +183,18 @@ def compare_table(
 
 
 def main() -> None:
+    renames: dict[str, Any] = (
+        json.loads(RENAMES_PATH.read_text(encoding="utf-8"))
+        if RENAMES_PATH.exists()
+        else {}
+    )
+    file_renames = renames.get("files", {})
     all_diffs: list[dict[str, object]] = []
     for fname, spec in TABLE_SPECS.items():
-        diffs, order_ok = compare_table(fname, spec)
+        repo_name = file_renames.get(fname, fname)
+        diffs, order_ok = compare_table(fname, spec, renames)
         order_note = "" if order_ok else " (raw row order differs)"
-        print(f"=== {fname}: {len(diffs)} disagreement(s){order_note} ===")
+        print(f"=== {repo_name}: {len(diffs)} disagreement(s){order_note} ===")
         for d in diffs:
             print("  ", d)
         all_diffs.extend(diffs)

@@ -1,4 +1,4 @@
-decade,rank,name,count,share_in_decade,log_ratio,peak_decade,sex_class,bearers,share_born_at_peak
+decade,rank,name,bearers_in_decade,share_in_decade,log_ratio,peak_decade,sex_class,bearers_national,share_born_at_peak
 1930,1,therezinha,4223,0.0016627083996106828,5.75588072451544,1930,f,9891,0.42751569143551327
 1930,2,thereza,2730,0.0010748742436507612,5.357583901246506,1930,f,7553,0.3616852146263911
 1930,3,edith,1798,0.0007079208388586332,4.540940841241266,1930,f,7394,0.24340056856640044

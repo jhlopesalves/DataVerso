@@ -1,0 +1,59 @@
+{
+  "files": {
+    "diversity_by_decade.csv": "concentration_by_decade.csv",
+    "diversity_common_cutoff.csv": "concentration_common_cutoff.csv",
+    "diversity_by_sex.csv": "concentration_by_sex_class.csv",
+    "heads_by_decade.csv": "leading_names_by_decade.csv",
+    "heads_by_sex.csv": "leading_names_by_sex_class.csv",
+    "top_names_by_sex.csv": "top_names_by_sex_class.csv",
+    "sex_class_coverage.csv": "sex_class_composition.csv",
+    "generation_names.csv": "peak_distinctive_names.csv"
+  },
+  "columns": {
+    "diversity_by_decade.csv": {
+      "set": "subset"
+    },
+    "heads_by_decade.csv": {
+      "count": "bearers"
+    },
+    "heads_by_sex.csv": {
+      "count": "bearers",
+      "share_within_sex": "share_within_class"
+    },
+    "top_names_by_sex.csv": {
+      "count": "bearers",
+      "share_within_sex": "share_within_class"
+    },
+    "sex_class_coverage.csv": {
+      "people": "listed_people"
+    },
+    "generation_names.csv": {
+      "count": "bearers_in_decade",
+      "bearers": "bearers_national"
+    },
+    "distinctive_names.csv": {
+      "count": "bearers"
+    },
+    "spelling_by_decade.csv": {
+      "people": "matching_people",
+      "names": "matching_names"
+    }
+  },
+  "values": {
+    "diversity_by_decade.csv": {
+      "subset": {
+        "without_heads": "without_leading_names"
+      }
+    },
+    "spelling_by_decade.csv": {
+      "pattern": {
+        "kwy": "contains_kwy",
+        "th": "contains_th",
+        "double_consonant": "doubled_letters",
+        "son_ending": "ends_with_son",
+        "ton_ending": "ends_with_ton",
+        "any": "any_feature"
+      }
+    }
+  }
+}
