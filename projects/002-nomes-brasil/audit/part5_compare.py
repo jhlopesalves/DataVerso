@@ -13,6 +13,7 @@ KEYS = {
     "top_names_by_sex.csv": ("decade", "sex_class", "rank"),
     "generation_names.csv": ("decade", "rank"),
     "life_cycles.csv": ("name",),
+    "life_cycle_robustness.csv": ("comparison", "k", "seed"),
 }
 INTS = {
     "decade",
@@ -24,8 +25,14 @@ INTS = {
     "peak_decade",
     "bearers",
     "group",
+    "k",
+    "seed",
+    "n_init",
+    "comeback_size",
+    "overlap_count",
+    "comeback_trough_decade",
 }
-STRINGS = {"name", "top1_name", "sex_class", "set"}
+STRINGS = {"name", "top1_name", "sex_class", "set", "comparison"}
 RTOL = 1e-9
 
 
@@ -64,7 +71,7 @@ def compare(path: Path, reference: Path, keys: tuple[str, ...]) -> dict:
     for key in sorted(audit.keys() & repo.keys()):
         for col in common:
             left, right = audit[key][col], repo[key][col]
-            if col in STRINGS:
+            if left == "" or right == "" or col in STRINGS:
                 same = left == right
             elif col in INTS:
                 same = int(left) == int(right)

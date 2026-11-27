@@ -13,6 +13,8 @@ from part1_recompute import (
     compute_diversity_by_decade,
 )
 from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
+from threadpoolctl import threadpool_limits
 
 AUDIT_DIR = Path(__file__).resolve().parent
 MIN_SHARE = 0.0005
@@ -145,6 +147,90 @@ def life_cycles(decade: pd.DataFrame, *, ddof: int) -> pd.DataFrame:
     return result.reset_index()
 
 
+def fit_comeback(
+    features: np.ndarray, relative: pd.DataFrame, *, k: int, n_init: int, seed: int
+) -> tuple[np.ndarray, set[str], int]:
+    """Fit k-means and return labels, comeback member names and trough decade."""
+    with threadpool_limits(limits=1):
+        labels = KMeans(n_clusters=k, n_init=n_init, random_state=seed).fit_predict(
+            features
+        )
+    medians = relative.groupby(labels).median()
+    trough = medians.loc[:, 1960:1990].min(axis=1)
+    comeback = int((medians[1930] - trough + medians[2020] - trough).idxmax())
+    members = set(relative.index[labels == comeback])
+    trough_decade = int(medians.loc[comeback].idxmin())
+    return labels, members, trough_decade
+
+
+def overlap_metrics(
+    members: set[str], reference: set[str], trough_decade: int
+) -> dict[str, int | float]:
+    """Compute comeback size, overlap count, Jaccard overlap and trough decade."""
+    shared = len(members & reference)
+    return {
+        "comeback_size": len(members),
+        "overlap_count": shared,
+        "overlap_jaccard": shared / len(members | reference),
+        "comeback_trough_decade": trough_decade,
+    }
+
+
+def life_cycle_robustness(decade: pd.DataFrame) -> pd.DataFrame:
+    """Compute life_cycle_robustness.csv across cluster counts and random seeds."""
+    shares = (
+        decade.pivot(index="name", columns="decade", values="share_in_decade")
+        .reindex(columns=DECADES)
+        .sort_index()
+    )
+    eligible = shares.loc[shares.max(axis=1).ge(MIN_SHARE)]
+    log_shares = np.log10(eligible.fillna(MISSING_SHARE).to_numpy())
+    centred = log_shares - log_shares.mean(axis=1, keepdims=True)
+    features = centred / log_shares.std(axis=1, ddof=1, keepdims=True)
+    relative_share = eligible.div(eligible.max(axis=1), axis="index").fillna(0)
+    relative = np.log10(relative_share.clip(lower=0.001))
+
+    _, main_members, _ = fit_comeback(features, relative, k=6, n_init=100, seed=0)
+    rows: list[dict[str, object]] = []
+    for k in range(3, 11):
+        labels, members, trough_decade = fit_comeback(
+            features, relative, k=k, n_init=100, seed=0
+        )
+        row: dict[str, object] = {
+            "comparison": "resolution",
+            "k": k,
+            "seed": 0,
+            "n_init": 100,
+            "silhouette": float(silhouette_score(features, labels)),
+        }
+        if 5 <= k <= 8:
+            row.update(overlap_metrics(members, main_members, trough_decade))
+        rows.append(row)
+
+    _, seed0_members, _ = fit_comeback(features, relative, k=6, n_init=20, seed=0)
+    for seed in range(10):
+        _, members, trough_decade = fit_comeback(
+            features, relative, k=6, n_init=20, seed=seed
+        )
+        rows.append(
+            {
+                "comparison": "seed",
+                "k": 6,
+                "seed": seed,
+                "n_init": 20,
+                **overlap_metrics(members, seed0_members, trough_decade),
+            }
+        )
+
+    return pd.DataFrame(rows).astype(
+        {
+            "comeback_size": "Int64",
+            "overlap_count": "Int64",
+            "comeback_trough_decade": "Int64",
+        }
+    )
+
+
 def main() -> None:
     parser = ArgumentParser(description=__doc__)
     parser.add_argument("phase", choices=("blind", "reconciled"))
@@ -186,9 +272,12 @@ def main() -> None:
             ["decade", "name", "sex_class", "count", "share_within_sex"]
         ]
     results["life_cycles.csv"] = life_cycles(decade, ddof=ddof)
+    if args.phase == "reconciled":
+        results["life_cycle_robustness.csv"] = life_cycle_robustness(decade)
     output.mkdir(parents=True, exist_ok=True)
     for filename, table in results.items():
-        assert table.notna().all().all(), filename
+        if filename != "life_cycle_robustness.csv":
+            assert table.notna().all().all(), filename
         table.to_csv(output / filename, index=False)
         print(f"{filename}: {len(table)} rows, {len(table.columns)} columns")
 
