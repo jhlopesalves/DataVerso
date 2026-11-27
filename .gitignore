@@ -22,6 +22,7 @@ tile_cache/
 **/data/raw/
 **/data/interim/
 **/data/cache/
+projects/002-nomes-brasil/audit/output/
 
 # Secrets and credentials
 .env
