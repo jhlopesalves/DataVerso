@@ -35,6 +35,7 @@ ACCENT = "#0f766e"  # header bar and the series that carries the argument
 # Exploration 002 encodes men's names in MEN and women's names in ACCENT. MEN has a contrast of
 # 4.8:1 with PAPER and stays apart from ACCENT under simulated deuteranopia and protanopia.
 MEN = "#b45309"
+BOTH = "#66625d"  # names used by both sexes
 # Life-cycle groups 1 to 5 use colours distinct from the teal and ochre sex-class colours.
 GROUP_COLOURS = ("#8a6a8c", "#b0717f", "#a88a45", "#6b82a8", "#7d9868")
 
