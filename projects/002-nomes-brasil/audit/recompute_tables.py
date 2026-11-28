@@ -1,8 +1,8 @@
 """Independent recomputation of DataVerso 002 (Nomes no Brasil) results from raw JSON.
 
-Reads only the raw IBGE API responses under data/raw/ and writes the six Part 1 CSVs
-to output/part1/, alongside intermediate rebuilt tables and query row-count checks
-under output/tables/.
+Reads only the raw IBGE API responses under data/raw/ and writes the six core CSVs
+to output/results/, alongside intermediate rebuilt tables and query row-count checks
+under output/processed/.
 """
 
 from __future__ import annotations
@@ -10,14 +10,15 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
 AUDIT_DIR = Path(__file__).resolve().parent
 RAW_DIR = AUDIT_DIR.parent / "data" / "raw"
-PART1_DIR = AUDIT_DIR / "output" / "part1"
-TABLES_DIR = AUDIT_DIR / "output" / "tables"
+RESULTS_DIR = AUDIT_DIR / "output" / "results"
+PROCESSED_DIR = AUDIT_DIR / "output" / "processed"
 
 DECADES = list(range(1930, 2030, 10))
 HEADS = ["maria", "ana", "joao", "jose"]
@@ -275,7 +276,7 @@ def compute_distinctive_names(names_decade: pd.DataFrame) -> pd.DataFrame:
     total_listed_all_decades = int(sum(listed_by_dec.values()))
     pooled_name_counts = names_decade.groupby("name")["count"].sum().to_dict()
 
-    rows: list[dict[str, object]] = []
+    rows: list[pd.DataFrame] = []
     for dec in DECADES:
         l_d = int(listed_by_dec[dec])
         l_not_d = total_listed_all_decades - l_d
@@ -327,14 +328,16 @@ def compute_heads_by_decade(names_decade: pd.DataFrame) -> pd.DataFrame:
     listed_by_dec = names_decade.groupby("decade")["count"].sum().to_dict()
     heads_df = names_decade[names_decade["name"].isin(HEADS_SET)]
     lookup = {
-        (int(r.decade), str(r.name)): int(r.count)
-        for r in heads_df.itertuples(index=False)
+        (int(dec_val), str(name_val)): int(count_val)
+        for dec_val, name_val, count_val in zip(
+            heads_df["decade"], heads_df["name"], heads_df["count"], strict=True
+        )
     }
 
     rows: list[dict[str, object]] = []
     for dec in DECADES:
         l_d = int(listed_by_dec[dec])
-        dec_rows = []
+        dec_rows: list[dict[str, Any]] = []
         for h in HEADS:
             c = lookup.get((dec, h), 0)
             dec_rows.append(
@@ -360,9 +363,11 @@ def classify_names_by_sex(
     m_counts = names_sex[names_sex["sex"] == "m"].set_index("name")["count"].to_dict()
 
     sex_class: dict[str, str] = {}
-    for row in names_total.itertuples(index=False):
-        name = str(row.name)
-        t = int(row.count)
+    for name_val, count_val in zip(
+        names_total["name"], names_total["count"], strict=True
+    ):
+        name = str(name_val)
+        t = int(count_val)
         f = int(f_counts.get(name, 0))
         m = int(m_counts.get(name, 0))
         if f + m > t:
@@ -447,20 +452,20 @@ def compute_spelling_and_sex_coverage(
 
 
 def main() -> None:
-    PART1_DIR.mkdir(parents=True, exist_ok=True)
-    TABLES_DIR.mkdir(parents=True, exist_ok=True)
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
 
     names_total, names_decade, names_sex, census_age_sex, query_counts = (
         build_raw_tables()
     )
 
     # Persist rebuilt base tables and query row-count audit.
-    names_total.to_parquet(TABLES_DIR / "names_total.parquet", index=False)
-    names_decade.to_parquet(TABLES_DIR / "names_decade.parquet", index=False)
-    names_sex.to_parquet(TABLES_DIR / "names_sex.parquet", index=False)
-    census_age_sex.to_parquet(TABLES_DIR / "census_age_sex.parquet", index=False)
+    names_total.to_parquet(PROCESSED_DIR / "names_total.parquet", index=False)
+    names_decade.to_parquet(PROCESSED_DIR / "names_decade.parquet", index=False)
+    names_sex.to_parquet(PROCESSED_DIR / "names_sex.parquet", index=False)
+    census_age_sex.to_parquet(PROCESSED_DIR / "census_age_sex.parquet", index=False)
     query_counts.to_csv(
-        TABLES_DIR / "query_row_counts.csv", index=False, encoding="utf-8"
+        PROCESSED_DIR / "query_row_counts.csv", index=False, encoding="utf-8"
     )
 
     diversity_df = compute_diversity_by_decade(names_decade)
@@ -481,7 +486,7 @@ def main() -> None:
     }
 
     for filename, frame in outputs.items():
-        out_path = PART1_DIR / filename
+        out_path = RESULTS_DIR / filename
         frame.to_csv(out_path, index=False, encoding="utf-8")
         print(f"Wrote {out_path} ({len(frame)} rows)")
 

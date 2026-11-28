@@ -1,22 +1,29 @@
-"""Compute the Part 5 audit tables exclusively from Part 1 inputs."""
+"""Compute the sex-class, generation and life-cycle audit tables."""
+
+from __future__ import annotations
 
 import hashlib
 from argparse import ArgumentParser
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
-from part1_recompute import (
+from recompute_tables import (
     DECADES,
     HEADS_SET,
+    PROCESSED_DIR,
+    RESULTS_DIR,
     classify_names_by_sex,
     compute_diversity_by_decade,
 )
-from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_score
-from threadpoolctl import threadpool_limits
+from sklearn.cluster import KMeans  # type: ignore[import-untyped]
+from sklearn.metrics import silhouette_score  # type: ignore[import-untyped]
+from threadpoolctl import threadpool_limits  # type: ignore[import-untyped]
 
 AUDIT_DIR = Path(__file__).resolve().parent
+BLIND_DIR = AUDIT_DIR / "output" / "blind"
 MIN_SHARE = 0.0005
 MISSING_SHARE = 1e-6
 SEX_CLASSES = ["f", "m"]
@@ -34,7 +41,7 @@ DIVERSITY_COLUMNS = [
 
 
 def sex_class_tables(decade: pd.DataFrame) -> dict[str, pd.DataFrame]:
-    """Reuse Part 1 diversity measures within each national name class."""
+    """Reuse core diversity measures within each national name class."""
     names = decade.loc[decade["sex_class"].isin(SEX_CLASSES)].copy()
     names["share_within_sex"] = names["count"] / names.groupby(GROUP_KEYS)[
         "count"
@@ -73,8 +80,8 @@ def sex_class_tables(decade: pd.DataFrame) -> dict[str, pd.DataFrame]:
     }
 
 
-def generation_names(decade: pd.DataFrame, totals: pd.Series) -> pd.DataFrame:
-    """Rank eligible peak-decade rows using Part 1's pooled-complement ratio."""
+def generation_names(decade: pd.DataFrame, totals: pd.Series[Any]) -> pd.DataFrame:
+    """Rank eligible peak-decade rows using the pooled-complement ratio."""
     peaks = decade.sort_values(
         ["share_in_decade", "decade"], ascending=[False, True]
     ).drop_duplicates("name")
@@ -132,7 +139,7 @@ def life_cycles(decade: pd.DataFrame, *, ddof: int) -> pd.DataFrame:
     # The missing-share proxy is used for the fit. An unlisted decade reaches
     # the lower display limit for relative share.
     relative_share = eligible.div(eligible.max(axis=1), axis="index").fillna(0)
-    relative = np.log10(relative_share.clip(lower=0.001))
+    relative = cast(pd.DataFrame, np.log10(relative_share.clip(lower=0.001)))
     medians = relative.groupby(labels).median()
     trough = medians.loc[:, 1960:1990].min(axis=1)
     comeback = (medians[1930] - trough + medians[2020] - trough).idxmax()
@@ -148,18 +155,24 @@ def life_cycles(decade: pd.DataFrame, *, ddof: int) -> pd.DataFrame:
 
 
 def fit_comeback(
-    features: np.ndarray, relative: pd.DataFrame, *, k: int, n_init: int, seed: int
-) -> tuple[np.ndarray, set[str], int]:
+    features: npt.NDArray[np.float64],
+    relative: pd.DataFrame,
+    *,
+    k: int,
+    n_init: int,
+    seed: int,
+) -> tuple[npt.NDArray[np.int32], set[str], int]:
     """Fit k-means and return labels, comeback member names and trough decade."""
     with threadpool_limits(limits=1):
-        labels = KMeans(n_clusters=k, n_init=n_init, random_state=seed).fit_predict(
-            features
-        )
+        labels: npt.NDArray[np.int32] = KMeans(
+            n_clusters=k, n_init=n_init, random_state=seed
+        ).fit_predict(features)
     medians = relative.groupby(labels).median()
     trough = medians.loc[:, 1960:1990].min(axis=1)
-    comeback = int((medians[1930] - trough + medians[2020] - trough).idxmax())
-    members = set(relative.index[labels == comeback])
-    trough_decade = int(medians.loc[comeback].idxmin())
+    comeback_scores = medians[1930] - trough + medians[2020] - trough
+    comeback = int(cast(int, comeback_scores.idxmax()))
+    members = {str(name) for name in relative.index[labels == comeback]}
+    trough_decade = int(cast(int, medians.loc[comeback].idxmin()))
     return labels, members, trough_decade
 
 
@@ -184,11 +197,11 @@ def life_cycle_robustness(decade: pd.DataFrame) -> pd.DataFrame:
         .sort_index()
     )
     eligible = shares.loc[shares.max(axis=1).ge(MIN_SHARE)]
-    log_shares = np.log10(eligible.fillna(MISSING_SHARE).to_numpy())
+    log_shares = np.log10(eligible.fillna(MISSING_SHARE).to_numpy(dtype=np.float64))
     centred = log_shares - log_shares.mean(axis=1, keepdims=True)
     features = centred / log_shares.std(axis=1, ddof=1, keepdims=True)
     relative_share = eligible.div(eligible.max(axis=1), axis="index").fillna(0)
-    relative = np.log10(relative_share.clip(lower=0.001))
+    relative = cast(pd.DataFrame, np.log10(relative_share.clip(lower=0.001)))
 
     _, main_members, _ = fit_comeback(features, relative, k=6, n_init=100, seed=0)
     rows: list[dict[str, object]] = []
@@ -236,16 +249,15 @@ def main() -> None:
     parser.add_argument("phase", choices=("blind", "reconciled"))
     parser.add_argument("--output", type=Path, help="Write to a new directory.")
     args = parser.parse_args()
-    output = args.output or AUDIT_DIR / "output" / "part5" / args.phase
-    inputs = AUDIT_DIR / "output" / "tables"
-    totals = pd.read_parquet(inputs / "names_total.parquet")
-    decade = pd.read_parquet(inputs / "names_decade.parquet")
-    sex = pd.read_parquet(inputs / "names_sex.parquet")
+    output = args.output or (BLIND_DIR if args.phase == "blind" else RESULTS_DIR)
+    totals = pd.read_parquet(PROCESSED_DIR / "names_total.parquet")
+    decade = pd.read_parquet(PROCESSED_DIR / "names_decade.parquet")
+    sex = pd.read_parquet(PROCESSED_DIR / "names_sex.parquet")
     decade["sex_class"] = decade["name"].map(classify_names_by_sex(totals, sex))
     assert decade["sex_class"].notna().all()
     class_counts = decade.groupby(GROUP_KEYS)["count"].sum().sort_index()
     previous_class_counts = (
-        pd.read_csv(AUDIT_DIR / "output" / "part1" / "sex_class_coverage.csv")
+        pd.read_csv(RESULTS_DIR / "sex_class_coverage.csv")
         .set_index(GROUP_KEYS)["people"]
         .sort_index()
     )
@@ -282,7 +294,8 @@ def main() -> None:
         print(f"{filename}: {len(table)} rows, {len(table.columns)} columns")
 
     hashes = []
-    for path in sorted(output.glob("*.csv")):
+    for filename in sorted(results):
+        path = output / filename
         with path.open("rb") as handle:
             digest = hashlib.file_digest(handle, "sha256").hexdigest()
         hashes.append(f"{digest}  {path.name}")
