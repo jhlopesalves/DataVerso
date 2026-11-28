@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from argparse import ArgumentParser
-from pathlib import Path
 from typing import Any, cast
 
 import numpy as np
@@ -243,10 +241,6 @@ def life_cycle_robustness(decade: pd.DataFrame) -> pd.DataFrame:
 
 
 def main() -> None:
-    parser = ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, help="Write to a new directory.")
-    args = parser.parse_args()
-    output = args.output or RESULTS_DIR
     totals = pd.read_parquet(PROCESSED_DIR / "names_total.parquet")
     decade = pd.read_parquet(PROCESSED_DIR / "names_decade.parquet")
     sex = pd.read_parquet(PROCESSED_DIR / "names_sex.parquet")
@@ -271,11 +265,11 @@ def main() -> None:
     )
     results["life_cycles.csv"] = life_cycles(decade)
     results["life_cycle_robustness.csv"] = life_cycle_robustness(decade)
-    output.mkdir(parents=True, exist_ok=True)
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
     for filename, table in results.items():
         if filename != "life_cycle_robustness.csv":
             assert table.notna().all().all(), filename
-        table.to_csv(output / filename, index=False)
+        table.to_csv(RESULTS_DIR / filename, index=False)
         print(f"{filename}: {len(table)} rows, {len(table.columns)} columns")
 
 
