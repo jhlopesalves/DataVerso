@@ -11,7 +11,7 @@ The subjects vary, from language and the humanities to urban and social data. Ea
 | Project | What it explores | Materials |
 | --- | --- | --- |
 | **001 · Belo Horizonte property transactions** | Declared property values, spatial variation, quality-adjusted trends and clustering around round numbers in municipal ITBI records. | [Project notes](projects/001-bh-itbi/README.md) · [Notebook](projects/001-bh-itbi/dataverso_001.ipynb) |
-| **002 · Brazilian first names across generations** | Concentration, generational names, life cycles and spelling fashions in first names by birth decade, from Censo 2022 data collected through IBGE's API. | [Project notes](projects/002-nomes-brasil/README.md) · [Notebook](projects/002-nomes-brasil/dataverso_002.ipynb) |
+| **002 · Brazilian first names in Censo 2022** | Concentration, the names that mark each birth decade, life cycles and spelling fashions in first names by birth decade, from Censo 2022 data collected through IBGE's API. | [Project notes](projects/002-nomes-brasil/README.md) · [Notebook](projects/002-nomes-brasil/dataverso_002.ipynb) |
 
 ## Exploring the work
 
