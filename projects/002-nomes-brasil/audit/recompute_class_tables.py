@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from argparse import ArgumentParser
 from pathlib import Path
 from typing import Any, cast
@@ -18,12 +17,10 @@ from recompute_tables import (
     classify_names_by_sex,
     compute_diversity_by_decade,
 )
-from sklearn.cluster import KMeans  # type: ignore[import-untyped]
-from sklearn.metrics import silhouette_score  # type: ignore[import-untyped]
-from threadpoolctl import threadpool_limits  # type: ignore[import-untyped]
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
+from threadpoolctl import threadpool_limits
 
-AUDIT_DIR = Path(__file__).resolve().parent
-BLIND_DIR = AUDIT_DIR / "output" / "blind"
 MIN_SHARE = 0.0005
 MISSING_SHARE = 1e-6
 SEX_CLASSES = ["f", "m"]
@@ -55,10 +52,11 @@ def sex_class_tables(decade: pd.DataFrame) -> dict[str, pd.DataFrame]:
         diversity.insert(1, "sex_class", sex_class)
         parts.append(diversity)
     diversity = pd.concat(parts).sort_values([*GROUP_KEYS, "set"])
+    diversity = diversity.loc[diversity["set"].eq("all"), DIVERSITY_COLUMNS]
 
     heads = names.loc[
         names["name"].isin(HEADS_SET),
-        ["decade", "sex_class", "name", "count", "share_within_sex"],
+        ["decade", "name", "sex_class", "count", "share_within_sex"],
     ].sort_values(["decade", "name"])
 
     ranked = (
@@ -72,7 +70,7 @@ def sex_class_tables(decade: pd.DataFrame) -> dict[str, pd.DataFrame]:
     ranked["rank"] = ranked.groupby(GROUP_KEYS).cumcount() + 1
     top_names = ranked[[*GROUP_KEYS, "rank", "name", "count", "share_within_sex"]]
     assert top_names.groupby(GROUP_KEYS).size().eq(10).all()
-    assert len(diversity) == 40 and len(heads) == 40
+    assert len(diversity) == 20 and len(heads) == 40
     return {
         "diversity_by_sex.csv": diversity,
         "heads_by_sex.csv": heads,
@@ -123,7 +121,7 @@ def generation_names(decade: pd.DataFrame, totals: pd.Series[Any]) -> pd.DataFra
     ]
 
 
-def life_cycles(decade: pd.DataFrame, *, ddof: int) -> pd.DataFrame:
+def life_cycles(decade: pd.DataFrame) -> pd.DataFrame:
     """Fit KMeans to eligible names ordered alphabetically by name."""
     shares = (
         decade.pivot(index="name", columns="decade", values="share_in_decade")
@@ -133,7 +131,7 @@ def life_cycles(decade: pd.DataFrame, *, ddof: int) -> pd.DataFrame:
     eligible = shares.loc[shares.max(axis=1).ge(MIN_SHARE)]
     log_shares = np.log10(eligible.fillna(MISSING_SHARE).to_numpy())
     centred = log_shares - log_shares.mean(axis=1, keepdims=True)
-    features = centred / log_shares.std(axis=1, ddof=ddof, keepdims=True)
+    features = centred / log_shares.std(axis=1, ddof=1, keepdims=True)
     labels = KMeans(n_clusters=6, n_init=100, random_state=0).fit_predict(features)
 
     # The missing-share proxy is used for the fit. An unlisted decade reaches
@@ -246,10 +244,9 @@ def life_cycle_robustness(decade: pd.DataFrame) -> pd.DataFrame:
 
 def main() -> None:
     parser = ArgumentParser(description=__doc__)
-    parser.add_argument("phase", choices=("blind", "reconciled"))
     parser.add_argument("--output", type=Path, help="Write to a new directory.")
     args = parser.parse_args()
-    output = args.output or (BLIND_DIR if args.phase == "blind" else RESULTS_DIR)
+    output = args.output or RESULTS_DIR
     totals = pd.read_parquet(PROCESSED_DIR / "names_total.parquet")
     decade = pd.read_parquet(PROCESSED_DIR / "names_decade.parquet")
     sex = pd.read_parquet(PROCESSED_DIR / "names_sex.parquet")
@@ -272,34 +269,14 @@ def main() -> None:
     results["generation_names.csv"] = generation_names(
         decade, totals.set_index("name")["count"]
     )
-    ddof = 0
-    if args.phase == "reconciled":
-        ddof = 1
-        diversity = results["diversity_by_sex.csv"]
-        results["diversity_by_sex.csv"] = diversity.loc[
-            diversity["set"].eq("all"), DIVERSITY_COLUMNS
-        ]
-        heads = results["heads_by_sex.csv"]
-        results["heads_by_sex.csv"] = heads[
-            ["decade", "name", "sex_class", "count", "share_within_sex"]
-        ]
-    results["life_cycles.csv"] = life_cycles(decade, ddof=ddof)
-    if args.phase == "reconciled":
-        results["life_cycle_robustness.csv"] = life_cycle_robustness(decade)
+    results["life_cycles.csv"] = life_cycles(decade)
+    results["life_cycle_robustness.csv"] = life_cycle_robustness(decade)
     output.mkdir(parents=True, exist_ok=True)
     for filename, table in results.items():
         if filename != "life_cycle_robustness.csv":
             assert table.notna().all().all(), filename
         table.to_csv(output / filename, index=False)
         print(f"{filename}: {len(table)} rows, {len(table.columns)} columns")
-
-    hashes = []
-    for filename in sorted(results):
-        path = output / filename
-        with path.open("rb") as handle:
-            digest = hashlib.file_digest(handle, "sha256").hexdigest()
-        hashes.append(f"{digest}  {path.name}")
-    (output / "SHA256SUMS").write_text("\n".join(hashes) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

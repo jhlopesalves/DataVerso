@@ -1,10 +1,4 @@
-"""Compare every audit processed and results table against the project outputs.
-
-Compares audit/output/processed/ with data/processed/ and every table in
-audit/output/results/ (mapped through results_renames.json) with results/.
-Exits with status 1 on any disagreement, any uncovered results file, or any
-results column missing from the audit table.
-"""
+"""Compare the audit's processed and results tables against the project outputs."""
 
 from __future__ import annotations
 
@@ -39,17 +33,17 @@ def normalise_non_float(series: pd.Series[Any]) -> pd.Series[Any]:
 
 def compare_frames(
     audit: pd.DataFrame, repo: pd.DataFrame, *, exact_columns: bool
-) -> str | None:
-    """Compare two DataFrames by value; return a failure reason or an ok note/None."""
+) -> tuple[bool, str]:
+    """Compare two DataFrames by value and return whether they differ and a note."""
     missing_in_audit = [col for col in repo.columns if col not in audit.columns]
     if missing_in_audit:
-        return f"audit lacks columns {missing_in_audit}"
+        return True, f"audit lacks columns {missing_in_audit}"
     if exact_columns:
         missing_in_repo = [col for col in audit.columns if col not in repo.columns]
         if missing_in_repo:
-            return f"results lacks columns {missing_in_repo}"
+            return True, f"results lacks columns {missing_in_repo}"
     if len(audit) != len(repo):
-        return f"{len(audit)} rows against {len(repo)}"
+        return True, f"{len(audit)} rows against {len(repo)}"
 
     cols = list(repo.columns)
     audit = audit[cols].copy()
@@ -61,42 +55,36 @@ def compare_frames(
         audit[col] = normalise_non_float(audit[col])
         repo[col] = normalise_non_float(repo[col])
 
-    sort_keys = [
-        c for c in cols if c in non_floats or c in DISCRETE_FLOAT_KEYS
-    ]
+    sort_keys = [c for c in cols if c in non_floats or c in DISCRETE_FLOAT_KEYS]
     audit = audit.sort_values(sort_keys, kind="stable", ignore_index=True)
     repo = repo.sort_values(sort_keys, kind="stable", ignore_index=True)
 
     for col in non_floats:
         if not audit[col].equals(repo[col]):
-            return f"column {col} differs"
+            return True, f"column {col} differs"
 
     worst = 0.0
     for col in floats:
         a = audit[col].to_numpy(dtype=np.float64)
         r = repo[col].to_numpy(dtype=np.float64)
         if not np.allclose(a, r, rtol=FLOAT_RTOL, atol=0.0, equal_nan=True):
-            return f"column {col} differs beyond {FLOAT_RTOL:g}"
+            return True, f"column {col} differs beyond {FLOAT_RTOL:g}"
         finite = np.isfinite(r) & (r != 0)
         if finite.any():
             worst = max(worst, float(np.max(np.abs(a[finite] / r[finite] - 1))))
-    return None if worst == 0.0 else f"ok, floats within {worst:.1e}"
+    return False, "" if worst == 0.0 else f"floats within {worst:.1e}"
 
 
-def report_outcome(label: str, problem: str | None) -> bool:
-    """Print one table line and return True if the comparison failed."""
-    failed = problem is not None and not problem.startswith("ok")
+def report_outcome(label: str, failed: bool, note: str) -> bool:
+    """Print one table comparison line and return whether it failed."""
     status = "FAIL" if failed else "same"
-    print(f"{status}  {label}  {problem or ''}".rstrip())
+    print(f"{status}  {label}  {note}".rstrip())
     return failed
 
 
 def main() -> None:
-    renames: dict[str, Any] = (
-        json.loads(RENAMES_PATH.read_text(encoding="utf-8"))
-        if RENAMES_PATH.exists()
-        else {}
-    )
+    """Compare all processed and results tables and exit with status 1 on failure."""
+    renames: dict[str, Any] = json.loads(RENAMES_PATH.read_text(encoding="utf-8"))
     file_renames: dict[str, str] = renames.get("files", {})
     column_renames: dict[str, dict[str, str]] = renames.get("columns", {})
     value_renames: dict[str, dict[str, dict[str, str]]] = renames.get("values", {})
@@ -109,13 +97,13 @@ def main() -> None:
         audit_path = AUDIT_PROCESSED_DIR / repo_path.name
         if not audit_path.exists():
             failures += report_outcome(
-                f"data/processed/{repo_path.name}", "missing in audit"
+                f"data/processed/{repo_path.name}", True, "missing in audit"
             )
             continue
         audit_df = pd.read_parquet(audit_path).rename(columns={"api_rank": "rank"})
         repo_df = pd.read_parquet(repo_path)
-        problem = compare_frames(audit_df, repo_df, exact_columns=False)
-        failures += report_outcome(f"data/processed/{repo_path.name}", problem)
+        failed, note = compare_frames(audit_df, repo_df, exact_columns=False)
+        failures += report_outcome(f"data/processed/{repo_path.name}", failed, note)
 
     audit_by_repo_name: dict[str, tuple[str, Path]] = {}
     for audit_path in sorted(AUDIT_RESULTS_DIR.glob("*.csv")):
@@ -127,10 +115,10 @@ def main() -> None:
         total += 1
         repo_path = REPO_RESULTS_DIR / name
         if name not in audit_by_repo_name:
-            failures += report_outcome(f"results/{name}", "missing in audit")
+            failures += report_outcome(f"results/{name}", True, "missing in audit")
             continue
         if not repo_path.exists():
-            failures += report_outcome(f"results/{name}", "missing in results")
+            failures += report_outcome(f"results/{name}", True, "missing in results")
             continue
         old_name, audit_path = audit_by_repo_name[name]
         audit_df = pd.read_csv(audit_path).rename(
@@ -139,8 +127,8 @@ def main() -> None:
         for col, mapping in value_renames.get(old_name, {}).items():
             audit_df[col] = audit_df[col].replace(mapping)
         repo_df = pd.read_csv(repo_path)
-        problem = compare_frames(audit_df, repo_df, exact_columns=True)
-        failures += report_outcome(f"results/{name}", problem)
+        failed, note = compare_frames(audit_df, repo_df, exact_columns=True)
+        failures += report_outcome(f"results/{name}", failed, note)
 
     print(f"{failures} failure(s) across {total} tables")
     sys.exit(1 if failures else 0)

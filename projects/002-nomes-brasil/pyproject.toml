@@ -36,7 +36,11 @@ select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "N", "ANN"]
 
 [tool.mypy]
 strict = true
-files = ["collect.py", "build.py", "house_style.py", "check_outputs.py", "tests"]
+files = ["collect.py", "build.py", "house_style.py", "check_outputs.py", "tests", "audit"]
+
+[[tool.mypy.overrides]]
+module = ["sklearn.*", "threadpoolctl"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
